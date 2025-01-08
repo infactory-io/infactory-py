@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.dataline_request import DatalineRequest
+from infactory_client.models.dataline_request import DatalineRequest
 
 class TestDatalineRequest(unittest.TestCase):
     """DatalineRequest unit test stubs"""

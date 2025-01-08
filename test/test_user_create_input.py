@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.user_create_input import UserCreateInput
+from infactory_client.models.user_create_input import UserCreateInput
 
 class TestUserCreateInput(unittest.TestCase):
     """UserCreateInput unit test stubs"""

@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.team_memberships_api import TeamMembershipsApi
+from infactory_client.api.team_memberships_api import TeamMembershipsApi
 
 
 class TestTeamMembershipsApi(unittest.TestCase):

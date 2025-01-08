@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.teams_api import TeamsApi
+from infactory_client.api.teams_api import TeamsApi
 
 
 class TestTeamsApi(unittest.TestCase):

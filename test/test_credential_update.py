@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.credential_update import CredentialUpdate
+from infactory_client.models.credential_update import CredentialUpdate
 
 class TestCredentialUpdate(unittest.TestCase):
     """CredentialUpdate unit test stubs"""

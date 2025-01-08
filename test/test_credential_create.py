@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.credential_create import CredentialCreate
+from infactory_client.models.credential_create import CredentialCreate
 
 class TestCredentialCreate(unittest.TestCase):
     """CredentialCreate unit test stubs"""

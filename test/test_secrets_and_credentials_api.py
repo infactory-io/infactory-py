@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.secrets_and_credentials_api import SecretsAndCredentialsApi
+from infactory_client.api.secrets_and_credentials_api import SecretsAndCredentialsApi
 
 
 class TestSecretsAndCredentialsApi(unittest.TestCase):

@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.data_sources_api import DataSourcesApi
+from infactory_client.api.data_sources_api import DataSourcesApi
 
 
 class TestDataSourcesApi(unittest.TestCase):

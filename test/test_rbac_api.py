@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.rbac_api import RBACApi
+from infactory_client.api.rbac_api import RBACApi
 
 
 class TestRBACApi(unittest.TestCase):

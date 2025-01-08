@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.authentication import Authentication
+from infactory_client.models.authentication import Authentication
 
 class TestAuthentication(unittest.TestCase):
     """Authentication unit test stubs"""

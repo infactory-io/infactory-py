@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.organizations import Organizations
+from infactory_client.models.organizations import Organizations
 
 class TestOrganizations(unittest.TestCase):
     """Organizations unit test stubs"""

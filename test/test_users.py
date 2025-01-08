@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.users import Users
+from infactory_client.models.users import Users
 
 class TestUsers(unittest.TestCase):
     """Users unit test stubs"""

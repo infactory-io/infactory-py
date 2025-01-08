@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.rbac import Rbac
+from infactory_client.models.rbac import Rbac
 
 class TestRbac(unittest.TestCase):
     """Rbac unit test stubs"""

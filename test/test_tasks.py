@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.tasks import Tasks
+from infactory_client.models.tasks import Tasks
 
 class TestTasks(unittest.TestCase):
     """Tasks unit test stubs"""

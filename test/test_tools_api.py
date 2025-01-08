@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.tools_api import ToolsApi
+from infactory_client.api.tools_api import ToolsApi
 
 
 class TestToolsApi(unittest.TestCase):

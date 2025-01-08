@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.legacy_api import LegacyApi
+from infactory_client.api.legacy_api import LegacyApi
 
 
 class TestLegacyApi(unittest.TestCase):

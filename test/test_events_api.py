@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.events_api import EventsApi
+from infactory_client.api.events_api import EventsApi
 
 
 class TestEventsApi(unittest.TestCase):

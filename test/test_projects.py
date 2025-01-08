@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.projects import Projects
+from infactory_client.models.projects import Projects
 
 class TestProjects(unittest.TestCase):
     """Projects unit test stubs"""
