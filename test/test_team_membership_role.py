@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.team_membership_role import TeamMembershipRole
+from infactory_client.models.team_membership_role import TeamMembershipRole
 
 class TestTeamMembershipRole(unittest.TestCase):
     """TeamMembershipRole unit test stubs"""

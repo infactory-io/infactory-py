@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.credentials import Credentials
+from infactory_client.models.credentials import Credentials
 
 class TestCredentials(unittest.TestCase):
     """Credentials unit test stubs"""

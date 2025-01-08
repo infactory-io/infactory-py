@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.projects_api import ProjectsApi
+from infactory_client.api.projects_api import ProjectsApi
 
 
 class TestProjectsApi(unittest.TestCase):

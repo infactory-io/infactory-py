@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.users_api import UsersApi
+from infactory_client.api.users_api import UsersApi
 
 
 class TestUsersApi(unittest.TestCase):

@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.body_create_secret_endpoint_v1_secrets_team_id_post import BodyCreateSecretEndpointV1SecretsTeamIdPost
+from infactory_client.models.body_create_secret_endpoint_v1_secrets_team_id_post import BodyCreateSecretEndpointV1SecretsTeamIdPost
 
 class TestBodyCreateSecretEndpointV1SecretsTeamIdPost(unittest.TestCase):
     """BodyCreateSecretEndpointV1SecretsTeamIdPost unit test stubs"""

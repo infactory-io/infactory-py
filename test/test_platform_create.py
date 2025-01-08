@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.platform_create import PlatformCreate
+from infactory_client.models.platform_create import PlatformCreate
 
 class TestPlatformCreate(unittest.TestCase):
     """PlatformCreate unit test stubs"""

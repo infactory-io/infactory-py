@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.secrets import Secrets
+from infactory_client.models.secrets import Secrets
 
 class TestSecrets(unittest.TestCase):
     """Secrets unit test stubs"""

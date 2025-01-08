@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.platform_api import PlatformApi
+from infactory_client.api.platform_api import PlatformApi
 
 
 class TestPlatformApi(unittest.TestCase):

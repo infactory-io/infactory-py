@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.datalineage import Datalineage
+from infactory_client.models.datalineage import Datalineage
 
 class TestDatalineage(unittest.TestCase):
     """Datalineage unit test stubs"""

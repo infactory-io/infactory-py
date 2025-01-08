@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.queryresponses import Queryresponses
+from infactory_client.models.queryresponses import Queryresponses
 
 class TestQueryresponses(unittest.TestCase):
     """Queryresponses unit test stubs"""

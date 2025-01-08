@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.workspace_tool_request import WorkspaceToolRequest
+from infactory_client.models.workspace_tool_request import WorkspaceToolRequest
 
 class TestWorkspaceToolRequest(unittest.TestCase):
     """WorkspaceToolRequest unit test stubs"""

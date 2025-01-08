@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.body_create_infrastructure_endpoint_v1_infrastructure_post import BodyCreateInfrastructureEndpointV1InfrastructurePost
+from infactory_client.models.body_create_infrastructure_endpoint_v1_infrastructure_post import BodyCreateInfrastructureEndpointV1InfrastructurePost
 
 class TestBodyCreateInfrastructureEndpointV1InfrastructurePost(unittest.TestCase):
     """BodyCreateInfrastructureEndpointV1InfrastructurePost unit test stubs"""

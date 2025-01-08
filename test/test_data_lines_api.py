@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.data_lines_api import DataLinesApi
+from infactory_client.api.data_lines_api import DataLinesApi
 
 
 class TestDataLinesApi(unittest.TestCase):

@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.source_credentials import SourceCredentials
+from infactory_client.models.source_credentials import SourceCredentials
 
 class TestSourceCredentials(unittest.TestCase):
     """SourceCredentials unit test stubs"""

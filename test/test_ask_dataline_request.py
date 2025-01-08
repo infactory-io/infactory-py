@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.ask_dataline_request import AskDatalineRequest
+from infactory_client.models.ask_dataline_request import AskDatalineRequest
 
 class TestAskDatalineRequest(unittest.TestCase):
     """AskDatalineRequest unit test stubs"""
@@ -32,8 +32,8 @@ class TestAskDatalineRequest(unittest.TestCase):
             params are included, when True both required and
             optional params are included """
         # uncomment below to create an instance of `AskDatalineRequest`
-        """
-        model = AskDatalineRequest()
+        
+        # model = AskDatalineRequest()
         if include_optional:
             return AskDatalineRequest(
                 workspace_name = '',
@@ -46,7 +46,6 @@ class TestAskDatalineRequest(unittest.TestCase):
                 dataset_name = '',
                 query = '',
         )
-        """
 
     def testAskDatalineRequest(self):
         """Test AskDatalineRequest"""

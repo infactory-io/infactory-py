@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.dataobjects import Dataobjects
+from infactory_client.models.dataobjects import Dataobjects
 
 class TestDataobjects(unittest.TestCase):
     """Dataobjects unit test stubs"""

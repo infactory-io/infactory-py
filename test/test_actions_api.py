@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.actions_api import ActionsApi
+from infactory_client.api.actions_api import ActionsApi
 
 
 class TestActionsApi(unittest.TestCase):

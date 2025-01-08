@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.queryprograms import Queryprograms
+from infactory_client.models.queryprograms import Queryprograms
 
 class TestQueryprograms(unittest.TestCase):
     """Queryprograms unit test stubs"""

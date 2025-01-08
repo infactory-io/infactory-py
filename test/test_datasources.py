@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.datasources import Datasources
+from infactory_client.models.datasources import Datasources
 
 class TestDatasources(unittest.TestCase):
     """Datasources unit test stubs"""

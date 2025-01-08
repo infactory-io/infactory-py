@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.infrastructure_api import InfrastructureApi
+from infactory_client.api.infrastructure_api import InfrastructureApi
 
 
 class TestInfrastructureApi(unittest.TestCase):

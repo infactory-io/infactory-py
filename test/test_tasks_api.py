@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.api.tasks_api import TasksApi
+from infactory_client.api.tasks_api import TasksApi
 
 
 class TestTasksApi(unittest.TestCase):

@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.tool import Tool
+from infactory_client.models.tool import Tool
 
 class TestTool(unittest.TestCase):
     """Tool unit test stubs"""

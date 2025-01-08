@@ -15,7 +15,7 @@
 
 import unittest
 
-from openapi_client.models.infrastructure import Infrastructure
+from infactory_client.models.infrastructure import Infrastructure
 
 class TestInfrastructure(unittest.TestCase):
     """Infrastructure unit test stubs"""
