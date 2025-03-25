@@ -1,53 +1,69 @@
-
 import httpx
 
+
 class APIError(Exception):
-    """Base exception for API-related errors"""
-    def __init__(self, message: str, status_code: int | None = None, response: httpx.Response | None = None):
+    """Base class for all API errors."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        response: httpx.Response | None = None,
+    ):
+        super().__init__(message)
+        self.message = message
         self.status_code = status_code
         self.response = response
-        super().__init__(message)
+
+    def __str__(self):
+        if self.status_code:
+            return f"{self.message} (Status: {self.status_code})"
+        return self.message
+
 
 class AuthenticationError(APIError):
-    """Exception raised for authentication errors (401)"""
+    """Raised when authentication fails."""
+
     pass
+
 
 class AuthorizationError(APIError):
-    """Exception raised for authorization errors (403)"""
+    """Raised when the user doesn't have permission to access a resource."""
+
     pass
+
 
 class NotFoundError(APIError):
-    """Exception raised when a resource is not found (404)"""
+    """Raised when a resource is not found."""
+
     pass
+
 
 class ValidationError(APIError):
-    """Exception raised for validation errors (422)"""
+    """Raised when request validation fails."""
+
     pass
+
 
 class RateLimitError(APIError):
-    """Exception raised when API rate limit is exceeded (429)"""
+    """Raised when rate limit is exceeded."""
+
     pass
+
 
 class ServerError(APIError):
-    """Exception raised for server-side errors (5xx)"""
+    """Raised when the server returns a 5xx error."""
+
     pass
+
 
 class TimeoutError(APIError):
-    """Exception raised when API request times out"""
+    """Raised when a request times out."""
+
     pass
 
-class JWTError(Exception):
-    """Base exception for JWT-related errors"""
-    pass
 
-class JWTFormatError(JWTError):
-    """Exception raised when JWT token format is invalid"""
-    pass
+class ConfigError(Exception):
+    """Raised when there is an issue with the configuration."""
 
-class JWTDecodeError(JWTError): 
-    """Exception raised when JWT token parts cannot be decoded"""
-    pass
-
-class JWTExpiredError(JWTError):
-    """Exception raised when JWT token has expired"""
     pass

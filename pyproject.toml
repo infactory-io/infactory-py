@@ -1,9 +1,22 @@
 [tool.poetry]
-name = "infactory"
-version = "0.5.0"
-description = "Infactory Python Package - Build AI Apps You Can Trust"
-authors = ["Ken Kocienda <kocienda@i7y.com>"]
-repository = "https://github.com/infactory-io/dev/tree/main/py/infactory"
+name = "infactory-py"
+version = "0.0.1"
+description = "Infactory Python Package -  Instantly connects your data sources, generate accurate queries, and give yourself complete control over AI responses."
+authors = ["Ken Kocienda <kocienda@infactory.ai>", "Sean Kruzel <sean@infactory.ai>"]
+repository = "https://github.com/infactory-io/infactory-py"
+homepage = "https://infactory.ai"
+documentation = "https://docs.infactory.ai"
+keywords = ["ai", "data", "query", "infactory"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
 
 license = "Infactory Python SDK"
 readme = "README.md"
@@ -13,7 +26,8 @@ packages = [
 ]
 
 [tool.poetry.scripts]
-infactory = "infactory_client.cli:app"
+nf = "infactory_client.cli:main"
+infactory = "infactory_client.cli:main"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<=3.13"
@@ -23,6 +37,8 @@ pydantic = "^2.9.2"
 typing-extensions = "^4.12.2"
 httpx = "^0.27.2"
 tenacity = "^9.0.0"
+python-dotenv = "^1.1.0"
+typer = "^0.15.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
@@ -34,6 +50,7 @@ pre-commit = "^3.8.0"
 coverage-badge = "^1.1.2"
 flake8 = "^7.1.1"
 parameterized = "^0.9.0"
+twine = "^6.1.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
