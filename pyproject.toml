@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "infactory"
-version = "0.5.0"
-description = "Infactory Python Package - Build AI Apps You Can Trust"
-authors = ["Ken Kocienda <kocienda@i7y.com>"]
+name = "infactory-py"
+version = "0.0.1"
+description = "Infactory Python Package -  Instantly connects your data sources, generate accurate queries, and give yourself complete control over AI responses."
+authors = ["Ken Kocienda <kocienda@infactory.ai>, Sean Kruzel <sean@infactory.ai>"]
 repository = "https://github.com/infactory-io/dev/tree/main/py/infactory"
 
 license = "Infactory Python SDK"
@@ -13,7 +13,8 @@ packages = [
 ]
 
 [tool.poetry.scripts]
-infactory = "infactory_client.cli:app"
+nf = "infactory_client.cli:main"
+infactory = "infactory_client.cli:main"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<=3.13"
@@ -23,6 +24,7 @@ pydantic = "^2.9.2"
 typing-extensions = "^4.12.2"
 httpx = "^0.27.2"
 tenacity = "^9.0.0"
+python-dotenv = "^1.1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
