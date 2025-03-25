@@ -148,6 +148,70 @@ def login():
         typer.echo(f"Failed to login: {e}", err=True)
         raise typer.Exit(1)
 
+@app.command()
+def show():
+    """Show current state including API key (masked), organization, team, and project."""
+    try:
+        # Try to get client with current API key
+        client = get_client()
+
+        # Get the API key (either from env or from saved file)
+        api_key = os.getenv("NF_API_KEY") or load_api_key()
+
+        # Format API key for display (show only first and last few characters)
+        masked_api_key = (
+            f"{api_key[:7]}...{api_key[-4:]}"
+            if api_key and len(api_key) > 11
+            else "Not set"
+        )
+
+        # Create a table for better formatting
+        table = Table(title="Current State", show_header=False)
+        table.add_column("Setting")
+        table.add_column("Value")
+
+        # Add API key
+        table.add_row("API Key", masked_api_key)
+
+        # Show organization info if set
+        if client.state.organization_id:
+            try:
+                org = client.organizations.get(client.state.organization_id)
+                table.add_row("Organization", f"{org.name} (ID: {client.state.organization_id})")
+            except Exception:
+                table.add_row("Organization ID", client.state.organization_id)
+        else:
+            table.add_row("Organization", "Not set")
+
+        # Show team info if set
+        if client.state.team_id:
+            try:
+                team = client.teams.get(client.state.team_id)
+                table.add_row("Team", f"{team.name} (ID: {client.state.team_id})")
+            except Exception:
+                table.add_row("Team ID", client.state.team_id)
+        else:
+            table.add_row("Team", "Not set")
+
+        # Show project info if set
+        if client.state.project_id:
+            try:
+                project = client.projects.get(client.state.project_id)
+                table.add_row("Project", f"{project.name} (ID: {client.state.project_id})")
+            except Exception:
+                table.add_row("Project ID", client.state.project_id)
+        else:
+            table.add_row("Project", "Not set")
+
+        console.print(table)
+
+    except ConfigError as e:
+        typer.echo(f"Configuration error: {e}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Failed to show state: {e}", err=True)
+        raise typer.Exit(1)
+
 @app.command(name="set-project")
 def set_project(project_id: str):
     """Set current project."""
