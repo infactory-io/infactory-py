@@ -181,7 +181,7 @@ def logout():
         raise typer.Exit(1)
 
 @app.command()
-def show():
+def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON format")):
     """Show current state including API key (masked), organization, team, and project."""
     try:
         # Try to get client with current API key
@@ -196,6 +196,62 @@ def show():
             if api_key and len(api_key) > 11
             else "Not set"
         )
+
+        if json_output:
+            state_data = {
+                "api_key": masked_api_key,
+                "user": {
+                    "id": client.state.user_id,
+                    "email": client.state.user_email,
+                    "name": client.state.user_name,
+                    "created_at": client.state.user_created_at
+                } if client.state.user_id else None,
+                "organization": None,
+                "team": None,
+                "project": None
+            }
+
+            # Add organization info if set
+            if client.state.organization_id:
+                try:
+                    org = client.organizations.get(client.state.organization_id)
+                    state_data["organization"] = {
+                        "id": client.state.organization_id,
+                        "name": org.name
+                    }
+                except Exception:
+                    state_data["organization"] = {
+                        "id": client.state.organization_id
+                    }
+
+            # Add team info if set
+            if client.state.team_id:
+                try:
+                    team = client.teams.get(client.state.team_id)
+                    state_data["team"] = {
+                        "id": client.state.team_id,
+                        "name": team.name
+                    }
+                except Exception:
+                    state_data["team"] = {
+                        "id": client.state.team_id
+                    }
+
+            # Add project info if set
+            if client.state.project_id:
+                try:
+                    project = client.projects.get(client.state.project_id)
+                    state_data["project"] = {
+                        "id": client.state.project_id,
+                        "name": project.name
+                    }
+                except Exception:
+                    state_data["project"] = {
+                        "id": client.state.project_id
+                    }
+
+            print(json.dumps(state_data, indent=2))
+            return
 
         # Create a table for better formatting
         table = Table(title="Current State", show_header=False)
