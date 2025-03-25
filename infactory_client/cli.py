@@ -816,101 +816,193 @@ def query_programs_list(
         raise typer.Exit(1)
 
 
-@query_app.command(name="run")
-def query_run(query_id: str):
-    """Run a query program."""
-    client = get_client()
-
-    try:
-        result = client.query_programs.evaluate(query_id)
-
-        typer.echo("Query executed successfully!")
-
-        if isinstance(result, dict) and "data" in result:
-            data = result["data"]
-            if isinstance(data, list) and data:
-                table = Table()
-                headers = list(data[0].keys())
-                for header in headers:
-                    table.add_column(header)
-
-                for row in data:
-                    table.add_row(*[str(row.get(h, "")) for h in headers])
-
-                console.print(table)
-            else:
-                print(json.dumps(data, indent=2))
-        else:
-            print(json.dumps(result, indent=2))
-
-    except Exception as e:
-        typer.echo(f"Failed to run query: {e}", err=True)
-        raise typer.Exit(1)
-
-
-@query_app.command(name="publish")
-def query_publish(
+@query_app.command(name="get")
+def query_get(
     query_id: str,
-    group_slots: int | None = typer.Option(None, help="Number of group slots"),
+    publish: bool = typer.Option(False, "--publish", help="Publish the query program"),
+    unpublish: bool = typer.Option(
+        False, "--unpublish", help="Unpublish the query program"
+    ),
+    run: bool = typer.Option(False, "--run", help="Run the query program"),
+    analyze: bool = typer.Option(False, "--analyze", help="Analyze the query program"),
 ):
-    """Publish a query program."""
+    """Get a query program by ID and optionally perform actions on it."""
     client = get_client()
 
     try:
-        query_program = client.query_programs.publish(query_id, group_slots=group_slots)
+        query_program = client.query_programs.get(query_id)
 
-        typer.echo("Query program published successfully!")
-        typer.echo(f"ID: {query_program.id}")
-        typer.echo(f"Name: {query_program.name}")
-        typer.echo(f"Published: {query_program.published}")
-        typer.echo(f"Public: {query_program.public}")
+        if publish and unpublish:
+            typer.echo("Error: Cannot use --publish and --unpublish together", err=True)
+            raise typer.Exit(1)
+
+        if publish:
+            query_program = client.query_programs.publish(query_id)
+            typer.echo(f"Query program {query_id} published successfully")
+
+        if unpublish:
+            query_program = client.query_programs.unpublish(query_id)
+            typer.echo(f"Query program {query_id} unpublished successfully")
+
+        if run:
+            result = client.query_programs.evaluate(query_id)
+            if isinstance(result, dict) and "data" in result:
+                data = result["data"]
+                if isinstance(data, list) and data:
+                    table = Table()
+                    headers = list(data[0].keys())
+                    for header in headers:
+                        table.add_column(header)
+
+                    for row in data:
+                        table.add_row(*[str(row.get(h, "")) for h in headers])
+
+                    console.print(table)
+                else:
+                    print(json.dumps(data, indent=2))
+            else:
+                print(json.dumps(result, indent=2))
+
+        if analyze:
+            # This is a placeholder for the analyze functionality
+            # Implement according to your API's analyze endpoint
+            typer.echo("Analyzing query program...")
+            analysis = client.query_programs.analyze(query_id)
+            print(json.dumps(analysis, indent=2))
+
+        if not any([publish, unpublish, run, analyze]):
+            # Display query program details
+            table = Table()
+            table.add_column("Field")
+            table.add_column("Value")
+
+            table.add_row("ID", query_program.id)
+            table.add_row("Name", query_program.name or "")
+            table.add_row("Published", "Yes" if query_program.published else "No")
+            table.add_row("Public", "Yes" if query_program.public else "No")
+            table.add_row("Query", query_program.query or "")
+            if query_program.created_at:
+                table.add_row("Created At", str(query_program.created_at))
+            if query_program.updated_at:
+                table.add_row("Updated At", str(query_program.updated_at))
+
+            console.print(table)
 
     except Exception as e:
-        typer.echo(f"Failed to publish query program: {e}", err=True)
+        typer.echo(f"Failed to get query program: {e}", err=True)
         raise typer.Exit(1)
 
 
-@query_app.command(name="unpublish")
-def query_unpublish(query_id: str):
-    """Unpublish a query program."""
+@query_app.command(name="select")
+def query_select(
+    publish: bool = typer.Option(
+        False, "--publish", help="Publish the selected query program"
+    ),
+    unpublish: bool = typer.Option(
+        False, "--unpublish", help="Unpublish the selected query program"
+    ),
+    run: bool = typer.Option(False, "--run", help="Run the selected query program"),
+    analyze: bool = typer.Option(
+        False, "--analyze", help="Analyze the selected query program"
+    ),
+):
+    """Interactively select a query program and optionally perform actions on it."""
     client = get_client()
 
-    try:
-        query_program = client.query_programs.unpublish(query_id)
-
-        typer.echo("Query program unpublished successfully!")
-        typer.echo(f"ID: {query_program.id}")
-        typer.echo(f"Name: {query_program.name}")
-        typer.echo(f"Published: {query_program.published}")
-
-    except Exception as e:
-        typer.echo(f"Failed to unpublish query program: {e}", err=True)
+    if publish and unpublish:
+        typer.echo("Error: Cannot use --publish and --unpublish together", err=True)
         raise typer.Exit(1)
 
-
-@query_app.command(name="generate")
-def query_generate(
-    dataline_id: str,
-    name: str | None = typer.Option(None, help="Name for the generated query program"),
-):
-    """Generate a query program."""
-    get_client()
+    if not client.state.project_id:
+        typer.echo(
+            "No project selected. Please select a project first with 'nf projects select'",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     try:
-        # This is a placeholder as the actual API call would depend on the specific implementation
-        typer.echo("Query program generation started...")
-        typer.echo("Analyzing data structure...")
-        typer.echo("Generating query program...")
+        query_programs = client.query_programs.list(project_id=client.state.project_id)
 
-        # Mock data for example
-        query_id = "qp-789ghi"
+        if not query_programs:
+            typer.echo("No query programs found")
+            return
 
-        typer.echo("Query program created successfully!")
-        typer.echo(f"ID: {query_id}")
-        typer.echo(f"Name: {name}")
+        # Create a list of choices
+        choices = {str(i): qp for i, qp in enumerate(query_programs, 1)}
+
+        # Display query programs with numbers
+        table = Table()
+        table.add_column("#")
+        table.add_column("ID")
+        table.add_column("Name")
+        table.add_column("Published")
+        table.add_column("Public")
+        table.add_column("Question")
+
+        for num, qp in choices.items():
+            question = qp.query or ""
+            if len(question) > 47:
+                question = question[:47] + "..."
+            table.add_row(
+                num,
+                qp.id,
+                qp.name or "",
+                "Yes" if qp.published else "No",
+                "Yes" if qp.public else "No",
+                question,
+            )
+
+        console.print(table)
+
+        # Prompt for selection
+        choice = Prompt.ask(
+            "\nSelect query program number",
+            choices=list(choices.keys()),
+            show_choices=False,
+        )
+
+        selected_query = choices[choice]
+        typer.echo(
+            f"\nSelected query program: {selected_query.name} (ID: {selected_query.id})"
+        )
+
+        # Handle actions based on flags
+        if publish:
+            result = client.query_programs.publish(selected_query.id)
+            typer.echo(f"Query program {selected_query.id} published successfully")
+
+        if unpublish:
+            result = client.query_programs.unpublish(selected_query.id)
+            typer.echo(f"Query program {selected_query.id} unpublished successfully")
+
+        if run:
+            result = client.query_programs.evaluate(selected_query.id)
+            if isinstance(result, dict) and "data" in result:
+                data = result["data"]
+                if isinstance(data, list) and data:
+                    table = Table()
+                    headers = list(data[0].keys())
+                    for header in headers:
+                        table.add_column(header)
+
+                    for row in data:
+                        table.add_row(*[str(row.get(h, "")) for h in headers])
+
+                    console.print(table)
+                else:
+                    print(json.dumps(data, indent=2))
+            else:
+                print(json.dumps(result, indent=2))
+
+        if analyze:
+            # This is a placeholder for the analyze functionality
+            # Implement according to your API's analyze endpoint
+            typer.echo("Analyzing query program...")
+            analysis = client.query_programs.analyze(selected_query.id)
+            print(json.dumps(analysis, indent=2))
 
     except Exception as e:
-        typer.echo(f"Failed to generate query program: {e}", err=True)
+        typer.echo(f"Failed to select query program: {e}", err=True)
         raise typer.Exit(1)
 
 

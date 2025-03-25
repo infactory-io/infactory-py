@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "infactory"
-version = "0.0.1"
+version = "0.0.2"
 description = "Infactory Python Package -  Instantly connects your data sources, generate accurate queries, and give yourself complete control over AI responses."
 authors = ["Ken Kocienda <kocienda@infactory.ai>", "Sean Kruzel <sean@infactory.ai>"]
 repository = "https://github.com/infactory-io/infactory-py"
