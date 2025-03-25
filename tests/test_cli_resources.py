@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import unittest
+import uuid
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -256,6 +257,146 @@ class TestCLIResources(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         show_data = json.loads(result.stdout)
         self.assertEqual(show_data["project"]["id"], project_id)
+
+    def test_datasources_list(self):
+        """Test datasource listing"""
+        # First select an organization and team
+        result = self.runner.invoke(app, ["orgs", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        orgs_data = json.loads(result.stdout)
+
+        if not orgs_data:
+            self.skipTest("No organizations available for testing")
+
+        # Set organization
+        org_id = orgs_data[0]["id"]
+        result = self.runner.invoke(app, ["orgs", "set", org_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set team
+        result = self.runner.invoke(app, ["teams", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        teams_data = json.loads(result.stdout)
+
+        if not teams_data:
+            self.skipTest("No teams available for testing")
+
+        team_id = teams_data[0]["id"]
+        result = self.runner.invoke(app, ["teams", "set", team_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set project
+        result = self.runner.invoke(app, ["projects", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        projects_data = json.loads(result.stdout)
+
+        if not projects_data:
+            self.skipTest("No projects available for testing")
+
+        project_id = projects_data[0]["id"]
+        result = self.runner.invoke(app, ["projects", "set", project_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Test datasources list without project ID (using current project)
+        result = self.runner.invoke(app, ["datasources", "list"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("ID", result.stdout)
+        self.assertIn("Name", result.stdout)
+        self.assertIn("Type", result.stdout)
+        self.assertIn("URI", result.stdout)
+
+        # Test datasources list with explicit project ID
+        result = self.runner.invoke(
+            app, ["datasources", "list", "--project-id", project_id]
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("ID", result.stdout)
+        self.assertIn("Name", result.stdout)
+        self.assertIn("Type", result.stdout)
+        self.assertIn("URI", result.stdout)
+
+    def test_datasource_create(self):
+        """Test datasource creation"""
+        # First select an organization and team
+        result = self.runner.invoke(app, ["orgs", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        orgs_data = json.loads(result.stdout)
+
+        if not orgs_data:
+            self.skipTest("No organizations available for testing")
+
+        # Set organization
+        org_id = orgs_data[0]["id"]
+        result = self.runner.invoke(app, ["orgs", "set", org_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set team
+        result = self.runner.invoke(app, ["teams", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        teams_data = json.loads(result.stdout)
+
+        if not teams_data:
+            self.skipTest("No teams available for testing")
+
+        team_id = teams_data[0]["id"]
+        result = self.runner.invoke(app, ["teams", "set", team_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set project
+        result = self.runner.invoke(app, ["projects", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        projects_data = json.loads(result.stdout)
+
+        if not projects_data:
+            self.skipTest("No projects available for testing")
+
+        project_id = projects_data[0]["id"]
+        result = self.runner.invoke(app, ["projects", "set", project_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Test datasource creation without project ID (using current project)
+        datasource_name = "test-ds-" + str(uuid.uuid4())[:8]
+        result = self.runner.invoke(
+            app,
+            [
+                "datasources",
+                "create",
+                datasource_name,
+                "--type",
+                "postgres",
+                "--uri",
+                "postgresql://user:pass@localhost:5432/db",
+            ],
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Datasource created successfully!", result.stdout)
+        self.assertIn("ID:", result.stdout)
+        self.assertIn("Name: " + datasource_name, result.stdout)
+        self.assertIn("Type: postgres", result.stdout)
+        self.assertIn("URI:", result.stdout)
+
+        # Test datasource creation with explicit project ID
+        datasource_name2 = "test-ds-" + str(uuid.uuid4())[:8]
+        result = self.runner.invoke(
+            app,
+            [
+                "datasources",
+                "create",
+                datasource_name2,
+                "--type",
+                "mysql",
+                "--uri",
+                "mysql://user:pass@localhost:3306/db",
+                "--project-id",
+                project_id,
+            ],
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Datasource created successfully!", result.stdout)
+        self.assertIn("ID:", result.stdout)
+        self.assertIn("Name: " + datasource_name2, result.stdout)
+        self.assertIn("Type: mysql", result.stdout)
+        self.assertIn("URI:", result.stdout)
 
 
 if __name__ == "__main__":
