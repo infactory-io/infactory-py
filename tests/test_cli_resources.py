@@ -609,6 +609,72 @@ class TestCLIResources(unittest.TestCase):
             self.skipTest("No datalines available for testing")
         self.assertIn("Select dataline number", result.stdout)
 
+    def test_query_programs_list(self):
+        """Test query program listing"""
+        # First select an organization, team, and project
+        result = self.runner.invoke(app, ["orgs", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        orgs_data = json.loads(result.stdout)
+
+        if not orgs_data:
+            self.skipTest("No organizations available for testing")
+
+        # Set organization
+        org_id = orgs_data[0]["id"]
+        result = self.runner.invoke(app, ["orgs", "set", org_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set team
+        result = self.runner.invoke(app, ["teams", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        teams_data = json.loads(result.stdout)
+
+        if not teams_data:
+            self.skipTest("No teams available for testing")
+
+        team_id = teams_data[0]["id"]
+        result = self.runner.invoke(app, ["teams", "set", team_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set project
+        result = self.runner.invoke(app, ["projects", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        projects_data = json.loads(result.stdout)
+
+        if not projects_data:
+            self.skipTest("No projects available for testing")
+
+        project_id = projects_data[0]["id"]
+        result = self.runner.invoke(app, ["projects", "set", project_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Test query programs list without project ID (using current project)
+        result = self.runner.invoke(app, ["query", "list"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("ID", result.stdout)
+        self.assertIn("Name", result.stdout)
+        self.assertIn("Published", result.stdout)
+        self.assertIn("Public", result.stdout)
+        self.assertIn("Question", result.stdout)
+
+        # Test query programs list with explicit project ID
+        result = self.runner.invoke(app, ["query", "list", "--project-id", project_id])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("ID", result.stdout)
+        self.assertIn("Name", result.stdout)
+        self.assertIn("Published", result.stdout)
+        self.assertIn("Public", result.stdout)
+        self.assertIn("Question", result.stdout)
+
+        # Test with include_deleted flag
+        result = self.runner.invoke(app, ["query", "list", "--include-deleted"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("ID", result.stdout)
+        self.assertIn("Name", result.stdout)
+        self.assertIn("Published", result.stdout)
+        self.assertIn("Public", result.stdout)
+        self.assertIn("Question", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
