@@ -42,6 +42,7 @@ app.add_typer(jobs_app, name="jobs")
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("infactory-cli")
+logger.setLevel(logging.DEBUG)
 console = Console()
 
 load_dotenv()
@@ -149,6 +150,37 @@ def login():
         raise typer.Exit(1)
 
 @app.command()
+def logout():
+    """Logout and clear all state information."""
+    try:
+        # Get config directory
+        config_dir = get_config_dir()
+        state_file = config_dir / "state.json"
+        api_key_file = config_dir / "api_key"
+
+        # Remove state file if it exists
+        if state_file.exists():
+            state_file.unlink()
+            typer.echo("State information cleared.")
+
+        # Remove API key file if it exists
+        if api_key_file.exists():
+            api_key_file.unlink()
+            typer.echo("API key removed.")
+
+        # Check if NF_API_KEY is set in environment
+        if os.getenv("NF_API_KEY"):
+            typer.echo("\nNOTE: The NF_API_KEY environment variable is still set.")
+            typer.echo("To completely logout, you should unset it:")
+            typer.echo("  export NF_API_KEY=")
+
+        typer.echo("\nLogout successful!")
+
+    except Exception as e:
+        typer.echo(f"Error during logout: {e}", err=True)
+        raise typer.Exit(1)
+
+@app.command()
 def show():
     """Show current state including API key (masked), organization, team, and project."""
     try:
@@ -172,6 +204,15 @@ def show():
 
         # Add API key
         table.add_row("API Key", masked_api_key)
+
+        # Show user info if set
+        if client.state.user_id:
+            table.add_row("User ID", client.state.user_id)
+            table.add_row("User Email", client.state.user_email or "Not set")
+            table.add_row("User Name", client.state.user_name or "Not set")
+            table.add_row("User Created At", client.state.user_created_at or "Not set")
+        else:
+            table.add_row("User", "Not set")
 
         # Show organization info if set
         if client.state.organization_id:

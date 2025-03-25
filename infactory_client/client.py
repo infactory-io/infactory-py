@@ -17,6 +17,9 @@ from infactory_client.errors import (
 class ClientState(BaseModel):
     """Represents the state of the client."""
     user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    user_created_at: Optional[str] = None
     organization_id: Optional[str] = None
     team_id: Optional[str] = None
     project_id: Optional[str] = None
@@ -179,7 +182,12 @@ class InfactoryClient:
         # Test connection by getting current user
         try:
             user_info = self._get("v1/authentication/me")
+            self._logger.debug(f"User info: {user_info}")
+            is_clerk_user = user_info.get("clerk_user_id") or False
             self.state.user_id = user_info.get("id")
+            self.state.user_email = user_info.get("email") or ("in CLERK" if is_clerk_user else "---")  
+            self.state.user_name = user_info.get("name") or ("in CLERK" if is_clerk_user else "---")
+            self.state.user_created_at = user_info.get("created_at")
             self._save_state()
         except Exception as e:
             raise AuthenticationError(f"Failed to connect with the provided API key: {e}")

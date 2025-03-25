@@ -2,8 +2,21 @@
 name = "infactory-py"
 version = "0.0.1"
 description = "Infactory Python Package -  Instantly connects your data sources, generate accurate queries, and give yourself complete control over AI responses."
-authors = ["Ken Kocienda <kocienda@infactory.ai>, Sean Kruzel <sean@infactory.ai>"]
-repository = "https://github.com/infactory-io/dev/tree/main/py/infactory"
+authors = ["Ken Kocienda <kocienda@infactory.ai>", "Sean Kruzel <sean@infactory.ai>"]
+repository = "https://github.com/infactory-io/infactory-py"
+homepage = "https://infactory.ai"
+documentation = "https://docs.infactory.ai"
+keywords = ["ai", "data", "query", "infactory"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
 
 license = "Infactory Python SDK"
 readme = "README.md"
@@ -37,6 +50,7 @@ pre-commit = "^3.8.0"
 coverage-badge = "^1.1.2"
 flake8 = "^7.1.1"
 parameterized = "^0.9.0"
+twine = "^6.1.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

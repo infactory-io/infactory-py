@@ -8,6 +8,49 @@ The Infactory SDK provides simple and powerful interfaces to work with your data
 pip install infactory
 ```
 
+## Development and Deployment
+
+### Local Development
+
+1. Clone the repository:
+```bash
+git clone https://github.com/infactory-io/infactory-py.git
+cd infactory-py
+```
+
+2. Install Poetry (if not already installed):
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+```
+
+3. Install dependencies:
+```bash
+poetry install
+```
+
+4. Run tests:
+```bash
+poetry run pytest
+```
+
+### Publishing to PyPI
+
+The package is automatically published to PyPI when a new version tag is pushed to the repository. To release a new version:
+
+1. Update the version in `pyproject.toml`
+2. Create and push a new version tag:
+```bash
+git add pyproject.toml
+git commit -m "Bump version to X.Y.Z"
+git tag vX.Y.Z
+git push origin main --tags
+```
+
+The GitHub Actions workflow will automatically:
+- Build the package
+- Run tests
+- Publish to PyPI using trusted publisher configuration
+
 ## Getting Started
 
 ### Setting your API Key
