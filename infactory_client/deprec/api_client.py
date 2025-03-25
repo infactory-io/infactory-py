@@ -27,11 +27,11 @@ from urllib.parse import quote
 from typing import Tuple, Optional, List, Dict, Union
 from pydantic import SecretStr
 
-from infactory_client.configuration import Configuration
+from infactory_client.deprec.configuration import Configuration
 from infactory_client.api_response import ApiResponse, T as ApiResponseT
 import infactory_client.models
-from infactory_client import rest
-from infactory_client.exceptions import (
+from infactory_client.deprec import rest
+from infactory_client.deprec.exceptions import (
     ApiValueError,
     ApiException,
     BadRequestException,
