@@ -19,7 +19,9 @@ class ProjectsService(BaseService):
         super().__init__(client)
         self.factory = ModelFactory(Project)
 
-    def list(self, team_id: str = None, include_deleted: bool = False) -> list[Project]:
+    def list(
+        self, team_id: str | None = None, include_deleted: bool = False
+    ) -> list[Project]:
         """
         List projects.
 
@@ -37,7 +39,7 @@ class ProjectsService(BaseService):
         response = self._get("v1/projects", params)
         return self.factory.create_list(response)
 
-    def get(self, project_id: str, team_id: str = None) -> Project:
+    def get(self, project_id: str, team_id: str | None = None) -> Project:
         """
         Get a project by ID.
 
@@ -55,7 +57,9 @@ class ProjectsService(BaseService):
         response = self._get(f"v1/projects/{project_id}", params)
         return self.factory.create(response)
 
-    def create(self, name: str, team_id: str, description: str = None) -> Project:
+    def create(
+        self, name: str, team_id: str, description: str | None = None
+    ) -> Project:
         """
         Create a new project.
 
@@ -81,7 +85,7 @@ class ProjectsService(BaseService):
         return project
 
     def update(
-        self, project_id: str, name: str = None, description: str = None
+        self, project_id: str, name: str | None = None, description: str | None = None
     ) -> Project:
         """
         Update a project.
@@ -149,7 +153,7 @@ class DataSourcesService(BaseService):
         super().__init__(client)
         self.factory = ModelFactory(DataSource)
 
-    def list(self, project_id: str = None) -> list[DataSource]:
+    def list(self, project_id: str | None = None) -> list[DataSource]:
         """
         List data sources for a project.
 
@@ -181,7 +185,11 @@ class DataSourcesService(BaseService):
         return self.factory.create(response)
 
     def create(
-        self, name: str, project_id: str = None, type: str = None, uri: str = None
+        self,
+        name: str,
+        project_id: str | None = None,
+        type: str | None = None,
+        uri: str | None = None,
     ) -> DataSource:
         """
         Create a new data source.
@@ -212,7 +220,11 @@ class DataSourcesService(BaseService):
         return self.factory.create(response)
 
     def update(
-        self, datasource_id: str, name: str = None, type: str = None, uri: str = None
+        self,
+        datasource_id: str,
+        name: str | None = None,
+        type: str | None = None,
+        uri: str | None = None,
     ) -> DataSource:
         """
         Update a data source.
@@ -259,9 +271,9 @@ class DataSourcesService(BaseService):
         self,
         datasource_id: str,
         file_path: str,
-        project_id: str = None,
-        source_url: str = None,
-        file_type: str = None,
+        project_id: str | None = None,
+        source_url: str | None = None,
+        file_type: str | None = None,
     ) -> dict:
         """
         Upload a file to a data source.
@@ -307,7 +319,7 @@ class DataLinesService(BaseService):
         super().__init__(client)
         self.factory = ModelFactory(DataLine)
 
-    def list(self, project_id: str = None) -> list[DataLine]:
+    def list(self, project_id: str | None = None) -> list[DataLine]:
         """
         List data lines for a project.
 
@@ -341,10 +353,10 @@ class DataLinesService(BaseService):
     def create(
         self,
         name: str,
-        project_id: str = None,
-        dataobject_id: str = None,
-        schema_code: str = None,
-        data_model: dict = None,
+        project_id: str | None = None,
+        dataobject_id: str | None = None,
+        schema_code: str | None = None,
+        data_model: dict | None = None,
     ) -> DataLine:
         """
         Create a new data line.
@@ -378,9 +390,9 @@ class DataLinesService(BaseService):
     def update(
         self,
         dataline_id: str,
-        name: str = None,
-        dataobject_id: str = None,
-        data_model: dict = None,
+        name: str | None = None,
+        dataobject_id: str | None = None,
+        data_model: dict | None = None,
     ) -> DataLine:
         """
         Update a data line.
@@ -418,7 +430,9 @@ class DataLinesService(BaseService):
         Returns:
             Updated data line
         """
-        response = self._patch(f"v1/datalines/{dataline_id}/schema", data=schema_code)
+        response = self._patch(
+            f"v1/datalines/{dataline_id}/schema", data={"schema_code": schema_code}
+        )
         return self.factory.create(response)
 
     def delete(self, dataline_id: str, permanent: bool = False) -> DataLine:
@@ -444,7 +458,7 @@ class TeamsService(BaseService):
         super().__init__(client)
         self.factory = ModelFactory(Team)
 
-    def list(self, organization_id: str = None) -> list[Team]:
+    def list(self, organization_id: str | None = None) -> list[Team]:
         """
         List teams.
 
@@ -478,7 +492,7 @@ class TeamsService(BaseService):
         response = self._get(f"v1/teams/{team_id}")
         return self.factory.create(response)
 
-    def create(self, name: str, organization_id: str = None) -> Team:
+    def create(self, name: str, organization_id: str | None = None) -> Team:
         """
         Create a new team.
 
@@ -609,9 +623,9 @@ class OrganizationsService(BaseService):
     def create(
         self,
         name: str,
-        description: str = None,
-        platform_id: str = None,
-        clerk_org_id: str = None,
+        description: str | None = None,
+        platform_id: str | None = None,
+        clerk_org_id: str | None = None,
     ) -> Organization:
         """
         Create a new organization.
@@ -645,7 +659,10 @@ class OrganizationsService(BaseService):
         return org
 
     def update(
-        self, organization_id: str, name: str = None, description: str = None
+        self,
+        organization_id: str,
+        name: str | None = None,
+        description: str | None = None,
     ) -> Organization:
         """
         Update an organization.
@@ -711,7 +728,7 @@ class UsersService(BaseService):
         super().__init__(client)
         self.factory = ModelFactory(User)
 
-    def list(self, organization_id: str = None) -> list[User]:
+    def list(self, organization_id: str | None = None) -> list[User]:
         """
         List users.
 
@@ -754,9 +771,9 @@ class UsersService(BaseService):
     def create(
         self,
         email: str,
-        name: str = None,
-        organization_id: str = None,
-        role: str = None,
+        name: str | None = None,
+        organization_id: str | None = None,
+        role: str | None = None,
     ) -> User:
         """
         Create a new user.
@@ -785,7 +802,11 @@ class UsersService(BaseService):
         return self.factory.create(response)
 
     def update(
-        self, user_id: str, email: str = None, name: str = None, role: str = None
+        self,
+        user_id: str,
+        email: str | None = None,
+        name: str | None = None,
+        role: str | None = None,
     ) -> User:
         """
         Update a user.
@@ -842,7 +863,10 @@ class UsersService(BaseService):
         return self.factory.create(response)
 
     def get_teams_with_organizations_and_projects(
-        self, user_id: str = None, clerk_user_id: str = None, email: str = None
+        self,
+        user_id: str | None = None,
+        clerk_user_id: str | None = None,
+        email: str | None = None,
     ) -> dict:
         """
         Get teams, organizations, and projects for a user.
@@ -881,8 +905,8 @@ class QueryProgramsService(BaseService):
 
     def list(
         self,
-        project_id: str = None,
-        dataline_id: str = None,
+        project_id: str | None = None,
+        dataline_id: str | None = None,
         skip: int = 0,
         take: int = 100,
         include_deleted: bool = False,
@@ -937,7 +961,7 @@ class QueryProgramsService(BaseService):
         question: str,
         code: str,
         dataline_id: str,
-        project_id: str = None,
+        project_id: str | None = None,
     ) -> QueryProgram:
         """
         Create a new query program.
@@ -971,9 +995,9 @@ class QueryProgramsService(BaseService):
     def update(
         self,
         queryprogram_id: str,
-        name: str = None,
-        question: str = None,
-        code: str = None,
+        name: str | None = None,
+        question: str | None = None,
+        code: str | None = None,
     ) -> QueryProgram:
         """
         Update a query program.
@@ -1046,7 +1070,7 @@ class QueryProgramsService(BaseService):
         response = self._patch(f"v1/queryprograms/{queryprogram_id}/unpublish")
         return self.factory.create(response)
 
-    def evaluate(self, queryprogram_id: str, dataline_id: str = None) -> dict:
+    def evaluate(self, queryprogram_id: str, dataline_id: str | None = None) -> dict:
         """
         Evaluate a query program.
 
