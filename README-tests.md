@@ -20,11 +20,11 @@ def test_projects_list(mocker):
     # Mock the HTTP response
     mock_response = [{"id": "proj-123", "name": "Test Project", "team_id": "team-456"}]
     mock_get = mocker.patch("infactory_client.client.Client._get", return_value=mock_response)
-    
+
     # Create client and call the method
     client = Client(api_key="test_key")
     projects = client.projects.list(team_id="team-456")
-    
+
     # Assertions
     mock_get.assert_called_once_with("v1/projects", {"team_id": "team-456"})
     assert len(projects) == 1
@@ -43,11 +43,11 @@ def test_projects_list_command(mocker):
     mock_client = MagicMock()
     mock_client.projects.list.return_value = mock_projects
     mocker.patch("infactory_cli.get_client", return_value=mock_client)
-    
+
     # Call the CLI command handler
     args = MagicMock(team_id="team-456")
     handle_projects_list(args)
-    
+
     # Assertions
     mock_client.projects.list.assert_called_once_with(team_id="team-456")
 ```
@@ -69,12 +69,12 @@ def test_create_and_publish_query_program(requests_mock):
     # Mock API responses
     requests_mock.post("https://api.infactory.ai/v1/queryprograms", json={"id": "qp-123", "name": "Test Query"})
     requests_mock.patch("https://api.infactory.ai/v1/queryprograms/qp-123/publish", json={"id": "qp-123", "published": True})
-    
+
     # Execute the workflow
     client = Client(api_key="test_key")
     query = client.query_programs.create(name="Test Query", dataline_id="dl-456", code="test code")
     published = client.query_programs.publish(query.id)
-    
+
     # Assertions
     assert published.id == "qp-123"
     assert published.published is True
@@ -93,7 +93,7 @@ Record actual API responses and replay them in tests:
 def test_list_projects():
     client = Client(api_key="test_key")
     projects = client.projects.list(team_id="team-456")
-    
+
     assert len(projects) > 0
     assert projects[0].id is not None
 ```
@@ -112,19 +112,19 @@ E2E tests validate complete user workflows against the actual API:
 def test_e2e_datasource_workflow():
     # Use a test API key from environment variable
     client = Client(api_key=os.environ.get("NF_TEST_API_KEY"))
-    
+
     # Create a project
     project = client.projects.create(name="Test Project", team_id=os.environ.get("NF_TEST_TEAM_ID"))
-    
+
     # Create a datasource
     datasource = client.datasources.create(name="Test DB", project_id=project.id, type="postgres")
-    
+
     # List datasources
     datasources = client.datasources.list(project_id=project.id)
-    
+
     # Assertions
     assert any(ds.id == datasource.id for ds in datasources)
-    
+
     # Clean up
     client.datasources.delete(datasource.id)
     client.projects.delete(project.id)
@@ -142,7 +142,7 @@ def test_cli_e2e():
         capture_output=True, text=True
     )
     assert "API key saved successfully" in result.stdout
-    
+
     result = subprocess.run(
         ["nf", "projects", "list", "--team-id", os.environ.get("NF_TEST_TEAM_ID")],
         capture_output=True, text=True

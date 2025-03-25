@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-import os
-import sys
 import json
 import logging
-from typing import Optional
-from dotenv import load_dotenv
+import os
+import sys
 
 import typer
+from dotenv import load_dotenv
 from rich import print
-from rich.table import Table
 from rich.console import Console
 from rich.prompt import Prompt
+from rich.table import Table
 
-from infactory_client.client import ClientState, InfactoryClient
+from infactory_client.client import InfactoryClient
 from infactory_client.errors import APIError, AuthenticationError, ConfigError
 
 # Initialize Typer app
@@ -48,6 +47,7 @@ console = Console()
 
 load_dotenv()
 
+
 def get_client() -> InfactoryClient:
     """Get an authenticated client instance."""
 
@@ -59,6 +59,7 @@ def get_client() -> InfactoryClient:
     except AuthenticationError:
         raise ConfigError("Invalid API key. Please login again with 'nf login'.")
 
+
 @app.command()
 def login():
     """Login with API key."""
@@ -66,7 +67,9 @@ def login():
     if not api_key:
         api_key = typer.prompt("Enter your API key", hide_input=True)
     else:
-        typer.echo(f"Using API key from environment variable starting with {api_key[:7]}...")
+        typer.echo(
+            f"Using API key from environment variable starting with {api_key[:7]}..."
+        )
 
     if not api_key:
         typer.echo("API key cannot be empty", err=True)
@@ -96,6 +99,7 @@ def login():
     except Exception as e:
         typer.echo(f"Failed to login: {e}", err=True)
         raise typer.Exit(1)
+
 
 @app.command()
 def logout():
@@ -130,15 +134,21 @@ def logout():
         typer.echo(f"Error during logout: {e}", err=True)
         raise typer.Exit(1)
 
+
 @app.command()
-def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON format")):
+def show(  # noqa: C901
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format")
+):
     """Show current state including API key (masked), organization, team, and project."""
     # Create a temporary client to get API key
     client = InfactoryClient()
     api_key = os.getenv("NF_API_KEY") or client._load_api_key_from_file()
 
     if not api_key:
-        typer.echo("Configuration error: No API key found. Please login with 'nf login' or set NF_API_KEY environment variable.", err=True)
+        typer.echo(
+            "Configuration error: No API key found. Please login with 'nf login' or set NF_API_KEY environment variable.",
+            err=True,
+        )
         raise typer.Exit(1)
 
     try:
@@ -155,15 +165,19 @@ def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON 
         if json_output:
             state_data = {
                 "api_key": masked_api_key,
-                "user": {
-                    "id": client.state.user_id,
-                    "email": client.state.user_email,
-                    "name": client.state.user_name,
-                    "created_at": client.state.user_created_at
-                } if client.state.user_id else None,
+                "user": (
+                    {
+                        "id": client.state.user_id,
+                        "email": client.state.user_email,
+                        "name": client.state.user_name,
+                        "created_at": client.state.user_created_at,
+                    }
+                    if client.state.user_id
+                    else None
+                ),
                 "organization": None,
                 "team": None,
-                "project": None
+                "project": None,
             }
 
             # Add organization info if set
@@ -172,25 +186,18 @@ def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON 
                     org = client.organizations.get(client.state.organization_id)
                     state_data["organization"] = {
                         "id": client.state.organization_id,
-                        "name": org.name
+                        "name": org.name,
                     }
                 except Exception:
-                    state_data["organization"] = {
-                        "id": client.state.organization_id
-                    }
+                    state_data["organization"] = {"id": client.state.organization_id}
 
             # Add team info if set
             if client.state.team_id:
                 try:
                     team = client.teams.get(client.state.team_id)
-                    state_data["team"] = {
-                        "id": client.state.team_id,
-                        "name": team.name
-                    }
+                    state_data["team"] = {"id": client.state.team_id, "name": team.name}
                 except Exception:
-                    state_data["team"] = {
-                        "id": client.state.team_id
-                    }
+                    state_data["team"] = {"id": client.state.team_id}
 
             # Add project info if set
             if client.state.project_id:
@@ -198,12 +205,10 @@ def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON 
                     project = client.projects.get(client.state.project_id)
                     state_data["project"] = {
                         "id": client.state.project_id,
-                        "name": project.name
+                        "name": project.name,
                     }
                 except Exception:
-                    state_data["project"] = {
-                        "id": client.state.project_id
-                    }
+                    state_data["project"] = {"id": client.state.project_id}
 
             print(json.dumps(state_data, indent=2))
             return
@@ -229,7 +234,9 @@ def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON 
         if client.state.organization_id:
             try:
                 org = client.organizations.get(client.state.organization_id)
-                table.add_row("Organization", f"{org.name} (ID: {client.state.organization_id})")
+                table.add_row(
+                    "Organization", f"{org.name} (ID: {client.state.organization_id})"
+                )
             except Exception:
                 table.add_row("Organization ID", client.state.organization_id)
         else:
@@ -249,7 +256,9 @@ def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON 
         if client.state.project_id:
             try:
                 project = client.projects.get(client.state.project_id)
-                table.add_row("Project", f"{project.name} (ID: {client.state.project_id})")
+                table.add_row(
+                    "Project", f"{project.name} (ID: {client.state.project_id})"
+                )
             except Exception:
                 table.add_row("Project ID", client.state.project_id)
         else:
@@ -264,6 +273,7 @@ def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON 
         typer.echo(f"Failed to show state: {e}", err=True)
         raise typer.Exit(1)
 
+
 @app.command(name="set-project")
 def set_project(project_id: str):
     """Set current project."""
@@ -276,6 +286,7 @@ def set_project(project_id: str):
     except Exception as e:
         typer.echo(f"Failed to set project: {e}", err=True)
         raise typer.Exit(1)
+
 
 @app.command(name="set-organization")
 def set_organization(organization_id: str):
@@ -290,6 +301,7 @@ def set_organization(organization_id: str):
         typer.echo(f"Failed to set organization: {e}", err=True)
         raise typer.Exit(1)
 
+
 @app.command(name="set-team")
 def set_team(team_id: str):
     """Set current team."""
@@ -302,6 +314,7 @@ def set_team(team_id: str):
     except Exception as e:
         typer.echo(f"Failed to set team: {e}", err=True)
         raise typer.Exit(1)
+
 
 @organizations_app.command(name="list")
 def organizations_list(
@@ -322,7 +335,7 @@ def organizations_list(
                 {
                     "id": org.id,
                     "name": org.name,
-                    "is_current": org.id == client.state.organization_id
+                    "is_current": org.id == client.state.organization_id,
                 }
                 for org in organizations
             ]
@@ -344,6 +357,7 @@ def organizations_list(
         typer.echo(f"Failed to list organizations: {e}", err=True)
         raise typer.Exit(1)
 
+
 @organizations_app.command(name="select")
 def organizations_select():
     """Interactively select an organization to set as current."""
@@ -358,7 +372,7 @@ def organizations_select():
 
         # Create a list of choices
         choices = {str(i): org for i, org in enumerate(organizations, 1)}
-        
+
         # Display organizations with numbers
         table = Table()
         table.add_column("#")
@@ -376,19 +390,24 @@ def organizations_select():
         choice = Prompt.ask(
             "\nSelect organization number",
             choices=list(choices.keys()),
-            show_choices=False
+            show_choices=False,
         )
 
         selected_org = choices[choice]
         client.set_current_organization(selected_org.id)
-        typer.echo(f"\nCurrent organization set to {selected_org.name} (ID: {selected_org.id})")
+        typer.echo(
+            f"\nCurrent organization set to {selected_org.name} (ID: {selected_org.id})"
+        )
 
     except Exception as e:
         typer.echo(f"Failed to select organization: {e}", err=True)
         raise typer.Exit(1)
 
+
 @projects_app.command(name="list")
-def projects_list(team_id: Optional[str] = typer.Option(None, help="Team ID to list projects for")):
+def projects_list(
+    team_id: str | None = typer.Option(None, help="Team ID to list projects for")
+):
     """List projects."""
     client = get_client()
 
@@ -398,7 +417,10 @@ def projects_list(team_id: Optional[str] = typer.Option(None, help="Team ID to l
         elif client.state.team_id:
             projects = client.projects.list(team_id=client.state.team_id)
         else:
-            typer.echo("No team ID provided. Please specify --team-id or set a current team.", err=True)
+            typer.echo(
+                "No team ID provided. Please specify --team-id or set a current team.",
+                err=True,
+            )
             raise typer.Exit(1)
 
         if not projects:
@@ -422,22 +444,28 @@ def projects_list(team_id: Optional[str] = typer.Option(None, help="Team ID to l
         typer.echo(f"Failed to list projects: {e}", err=True)
         raise typer.Exit(1)
 
+
 @projects_app.command(name="create")
 def project_create(
     name: str,
-    team_id: Optional[str] = typer.Option(None, help="Team ID to create project in"),
-    description: Optional[str] = typer.Option(None, help="Project description"),
+    team_id: str | None = typer.Option(None, help="Team ID to create project in"),
+    description: str | None = typer.Option(None, help="Project description"),
 ):
     """Create a new project."""
     client = get_client()
 
     try:
         if not team_id and not client.state.team_id:
-            typer.echo("No team ID provided. Please specify --team-id or set a current team.", err=True)
+            typer.echo(
+                "No team ID provided. Please specify --team-id or set a current team.",
+                err=True,
+            )
             raise typer.Exit(1)
 
         team_id = team_id or client.state.team_id
-        project = client.projects.create(name=name, team_id=team_id, description=description)
+        project = client.projects.create(
+            name=name, team_id=team_id, description=description
+        )
 
         typer.echo("Project created successfully!")
         typer.echo(f"ID: {project.id}")
@@ -449,16 +477,22 @@ def project_create(
         typer.echo(f"Failed to create project: {e}", err=True)
         raise typer.Exit(1)
 
+
 @datasources_app.command(name="list")
 def datasources_list(
-    project_id: Optional[str] = typer.Option(None, help="Project ID to list datasources for")
+    project_id: str | None = typer.Option(
+        None, help="Project ID to list datasources for"
+    )
 ):
     """List datasources."""
     client = get_client()
 
     try:
         if not project_id and not client.state.project_id:
-            typer.echo("No project ID provided. Please specify --project-id or set a current project.", err=True)
+            typer.echo(
+                "No project ID provided. Please specify --project-id or set a current project.",
+                err=True,
+            )
             raise typer.Exit(1)
 
         project_id = project_id or client.state.project_id
@@ -486,19 +520,25 @@ def datasources_list(
         typer.echo(f"Failed to list datasources: {e}", err=True)
         raise typer.Exit(1)
 
+
 @datasources_app.command(name="create")
 def datasource_create(
     name: str,
     type: str = typer.Option(..., help="Datasource type (e.g. postgres, mysql)"),
-    project_id: Optional[str] = typer.Option(None, help="Project ID to create datasource in"),
-    uri: Optional[str] = typer.Option(None, help="Datasource URI"),
+    project_id: str | None = typer.Option(
+        None, help="Project ID to create datasource in"
+    ),
+    uri: str | None = typer.Option(None, help="Datasource URI"),
 ):
     """Create a new datasource."""
     client = get_client()
 
     try:
         if not project_id and not client.state.project_id:
-            typer.echo("No project ID provided. Please specify --project-id or set a current project.", err=True)
+            typer.echo(
+                "No project ID provided. Please specify --project-id or set a current project.",
+                err=True,
+            )
             raise typer.Exit(1)
 
         project_id = project_id or client.state.project_id
@@ -520,16 +560,20 @@ def datasource_create(
         typer.echo(f"Failed to create datasource: {e}", err=True)
         raise typer.Exit(1)
 
+
 @datalines_app.command(name="list")
 def datalines_list(
-    project_id: Optional[str] = typer.Option(None, help="Project ID to list datalines for")
+    project_id: str | None = typer.Option(None, help="Project ID to list datalines for")
 ):
     """List datalines."""
     client = get_client()
 
     try:
         if not project_id and not client.state.project_id:
-            typer.echo("No project ID provided. Please specify --project-id or set a current project.", err=True)
+            typer.echo(
+                "No project ID provided. Please specify --project-id or set a current project.",
+                err=True,
+            )
             raise typer.Exit(1)
 
         project_id = project_id or client.state.project_id
@@ -552,9 +596,12 @@ def datalines_list(
         typer.echo(f"Failed to list datalines: {e}", err=True)
         raise typer.Exit(1)
 
+
 @query_app.command(name="list")
 def query_programs_list(
-    project_id: Optional[str] = typer.Option(None, help="Project ID to list query programs for"),
+    project_id: str | None = typer.Option(
+        None, help="Project ID to list query programs for"
+    ),
     include_deleted: bool = typer.Option(False, help="Include deleted query programs"),
 ):
     """List query programs."""
@@ -562,7 +609,10 @@ def query_programs_list(
 
     try:
         if not project_id and not client.state.project_id:
-            typer.echo("No project ID provided. Please specify --project-id or set a current project.", err=True)
+            typer.echo(
+                "No project ID provided. Please specify --project-id or set a current project.",
+                err=True,
+            )
             raise typer.Exit(1)
 
         project_id = project_id or client.state.project_id
@@ -600,6 +650,7 @@ def query_programs_list(
         typer.echo(f"Failed to list query programs: {e}", err=True)
         raise typer.Exit(1)
 
+
 @query_app.command(name="run")
 def query_run(query_id: str):
     """Run a query program."""
@@ -631,10 +682,11 @@ def query_run(query_id: str):
         typer.echo(f"Failed to run query: {e}", err=True)
         raise typer.Exit(1)
 
+
 @query_app.command(name="publish")
 def query_publish(
     query_id: str,
-    group_slots: Optional[int] = typer.Option(None, help="Number of group slots"),
+    group_slots: int | None = typer.Option(None, help="Number of group slots"),
 ):
     """Publish a query program."""
     client = get_client()
@@ -651,6 +703,7 @@ def query_publish(
     except Exception as e:
         typer.echo(f"Failed to publish query program: {e}", err=True)
         raise typer.Exit(1)
+
 
 @query_app.command(name="unpublish")
 def query_unpublish(query_id: str):
@@ -669,13 +722,14 @@ def query_unpublish(query_id: str):
         typer.echo(f"Failed to unpublish query program: {e}", err=True)
         raise typer.Exit(1)
 
+
 @query_app.command(name="generate")
 def query_generate(
     dataline_id: str,
-    name: Optional[str] = typer.Option(None, help="Name for the generated query program"),
+    name: str | None = typer.Option(None, help="Name for the generated query program"),
 ):
     """Generate a query program."""
-    client = get_client()
+    get_client()
 
     try:
         # This is a placeholder as the actual API call would depend on the specific implementation
@@ -694,16 +748,20 @@ def query_generate(
         typer.echo(f"Failed to generate query program: {e}", err=True)
         raise typer.Exit(1)
 
+
 @endpoints_app.command(name="list")
 def endpoints_list(
-    project_id: Optional[str] = typer.Option(None, help="Project ID to list endpoints for")
+    project_id: str | None = typer.Option(None, help="Project ID to list endpoints for")
 ):
     """List endpoints."""
     client = get_client()
 
     try:
         if not project_id and not client.state.project_id:
-            typer.echo("No project ID provided. Please specify --project-id or set a current project.", err=True)
+            typer.echo(
+                "No project ID provided. Please specify --project-id or set a current project.",
+                err=True,
+            )
             raise typer.Exit(1)
 
         project_id = project_id or client.state.project_id
@@ -743,10 +801,11 @@ def endpoints_list(
         typer.echo(f"Failed to list endpoints: {e}", err=True)
         raise typer.Exit(1)
 
+
 @endpoints_app.command(name="curl-example")
 def endpoints_curl(endpoint_id: str):
     """Show curl example for endpoint."""
-    client = get_client()
+    get_client()
 
     try:
         # Mock data for example
@@ -769,24 +828,36 @@ def endpoints_curl(endpoint_id: str):
         typer.echo(f"Failed to generate curl example: {e}", err=True)
         raise typer.Exit(1)
 
+
 @jobs_app.command(name="subscribe")
 def jobs_subscribe(datasource_id: str):
     """Subscribe to job updates."""
-    client = get_client()
+    get_client()
 
     try:
         typer.echo(f"Subscribing to jobs for datasource {datasource_id}...")
 
         # Mock data for example
-        typer.echo("[2025-03-25 14:30:21] Job j-123456 started: Connecting to PostgreSQL database")
-        typer.echo("[2025-03-25 14:30:22] Job j-123456 progress: Successfully connected to database")
-        typer.echo("[2025-03-25 14:30:25] Job j-123456 progress: Analyzing table structure")
-        typer.echo("[2025-03-25 14:30:30] Job j-123456 progress: Found 12 tables with 450,000 rows total")
-        typer.echo("[2025-03-25 14:30:45] Job j-123456 completed: Database connection established and schema analyzed")
+        typer.echo(
+            "[2025-03-25 14:30:21] Job j-123456 started: Connecting to PostgreSQL database"
+        )
+        typer.echo(
+            "[2025-03-25 14:30:22] Job j-123456 progress: Successfully connected to database"
+        )
+        typer.echo(
+            "[2025-03-25 14:30:25] Job j-123456 progress: Analyzing table structure"
+        )
+        typer.echo(
+            "[2025-03-25 14:30:30] Job j-123456 progress: Found 12 tables with 450,000 rows total"
+        )
+        typer.echo(
+            "[2025-03-25 14:30:45] Job j-123456 completed: Database connection established and schema analyzed"
+        )
 
     except Exception as e:
         typer.echo(f"Failed to subscribe to jobs: {e}", err=True)
         raise typer.Exit(1)
+
 
 def main():
     """Main entry point for the CLI."""
@@ -804,6 +875,7 @@ def main():
     except Exception as e:
         typer.echo(f"Unexpected error: {e}", err=True)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

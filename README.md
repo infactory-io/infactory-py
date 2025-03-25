@@ -223,7 +223,7 @@ query_program = client.query_programs.create(
     question="What are the monthly sales by region?",
     code="""
     import pandas as pd
-    
+
     def execute(df):
         # Group by month and region, sum sales
         result = df.groupby(['month', 'region'])['sales'].sum().reset_index()
