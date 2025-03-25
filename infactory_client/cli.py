@@ -84,6 +84,9 @@ def login():
         client.save_state()
 
         # List organizations and set first one as active
+        first_org = None
+        first_team = None
+        first_project = None
         try:
             organizations = client.organizations.list()
             if organizations:
@@ -91,6 +94,25 @@ def login():
                 client.set_current_organization(first_org.id)
             else:
                 typer.echo("\nNo organizations found")
+            # List teams and set first one as active
+            if first_org:
+                teams = client.teams.list()
+                if teams:
+                    first_team = teams[0]
+                    client.set_current_team(first_team.id)
+
+                    # List projects and set first one as active
+                    try:
+                        projects = client.projects.list(team_id=first_team.id)
+                        if projects:
+                            first_project = projects[0]
+                            client.set_current_project(first_project.id)
+                        else:
+                            typer.echo("\nNo projects found for the selected team")
+                    except Exception as e:
+                        typer.echo(f"\nWarning: Could not list projects: {e}", err=True)
+                else:
+                    typer.echo("\nNo teams found for the selected organization")
 
         except Exception as e:
             typer.echo(f"\nWarning: Could not list organizations: {e}", err=True)
@@ -276,48 +298,6 @@ def show(  # noqa: C901
         raise typer.Exit(1)
 
 
-@app.command(name="set-project")
-def set_project(project_id: str):
-    """Set current project."""
-    client = get_client()
-
-    try:
-        project = client.projects.get(project_id)
-        client.set_current_project(project.id)
-        typer.echo(f"Current project set to {project.name} (ID: {project.id})")
-    except Exception as e:
-        typer.echo(f"Failed to set project: {e}", err=True)
-        raise typer.Exit(1)
-
-
-@app.command(name="set-organization")
-def set_organization(organization_id: str):
-    """Set current organization."""
-    client = get_client()
-
-    try:
-        org = client.organizations.get(organization_id)
-        client.set_current_organization(org.id)
-        typer.echo(f"Current organization set to {org.name} (ID: {org.id})")
-    except Exception as e:
-        typer.echo(f"Failed to set organization: {e}", err=True)
-        raise typer.Exit(1)
-
-
-@app.command(name="set-team")
-def set_team(team_id: str):
-    """Set current team."""
-    client = get_client()
-
-    try:
-        team = client.teams.get(team_id)
-        client.set_current_team(team.id)
-        typer.echo(f"Current team set to {team.name} (ID: {team.id})")
-    except Exception as e:
-        typer.echo(f"Failed to set team: {e}", err=True)
-        raise typer.Exit(1)
-
-
 @organizations_app.command(name="list")
 def organizations_list(
     json_output: bool = typer.Option(False, "--json", help="Output in JSON format")
@@ -357,6 +337,20 @@ def organizations_list(
 
     except Exception as e:
         typer.echo(f"Failed to list organizations: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@organizations_app.command(name="set")
+def set_organization(organization_id: str):
+    """Set current organization."""
+    client = get_client()
+
+    try:
+        org = client.organizations.get(organization_id)
+        client.set_current_organization(org.id)
+        typer.echo(f"Current organization set to {org.name} (ID: {org.id})")
+    except Exception as e:
+        typer.echo(f"Failed to set organization: {e}", err=True)
         raise typer.Exit(1)
 
 
@@ -460,6 +454,20 @@ def projects_list(
 
     except Exception as e:
         typer.echo(f"Failed to list projects: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@projects_app.command(name="set")
+def set_project(project_id: str):
+    """Set current project."""
+    client = get_client()
+
+    try:
+        project = client.projects.get(project_id)
+        client.set_current_project(project.id)
+        typer.echo(f"Current project set to {project.name} (ID: {project.id})")
+    except Exception as e:
+        typer.echo(f"Failed to set project: {e}", err=True)
         raise typer.Exit(1)
 
 
@@ -939,6 +947,20 @@ def teams_list(
 
     except Exception as e:
         typer.echo(f"Failed to list teams: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@teams_app.command(name="set")
+def set_team(team_id: str):
+    """Set current team."""
+    client = get_client()
+
+    try:
+        team = client.teams.get(team_id)
+        client.set_current_team(team.id)
+        typer.echo(f"Current team set to {team.name} (ID: {team.id})")
+    except Exception as e:
+        typer.echo(f"Failed to set team: {e}", err=True)
         raise typer.Exit(1)
 
 
