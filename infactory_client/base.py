@@ -15,7 +15,7 @@ class BaseService:
         """Initialize the service with a client instance."""
         self.client = client
     
-    def _get(self, endpoint: str, params: Dict[str, Any] = None) -> Any:
+    def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """
         Make a GET request to the API.
         
@@ -26,9 +26,9 @@ class BaseService:
         Returns:
             The JSON response
         """
-        return self.client._get(endpoint, params)
+        return self.client.get(endpoint, params=params if params is not None else {})
     
-    def _post(self, endpoint: str, data: Dict[str, Any] = None, params: Dict[str, Any] = None) -> Any:
+    def _post(self, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Any:
         """
         Make a POST request to the API.
         
@@ -40,9 +40,11 @@ class BaseService:
         Returns:
             The JSON response
         """
-        return self.client._post(endpoint, data, params)
+        return self.client.post(endpoint, 
+                              data=data if data is not None else {}, 
+                              params=params if params is not None else {})
     
-    def _patch(self, endpoint: str, data: Dict[str, Any] = None, params: Dict[str, Any] = None) -> Any:
+    def _patch(self, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Any:
         """
         Make a PATCH request to the API.
         
@@ -54,9 +56,11 @@ class BaseService:
         Returns:
             The JSON response
         """
-        return self.client._patch(endpoint, data, params)
+        return self.client.patch(endpoint,
+                               data=data if data is not None else {},
+                               params=params if params is not None else {})
     
-    def _delete(self, endpoint: str, params: Dict[str, Any] = None) -> Any:
+    def _delete(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """
         Make a DELETE request to the API.
         
@@ -67,7 +71,7 @@ class BaseService:
         Returns:
             The JSON response
         """
-        return self.client._delete(endpoint, params)
+        return self.client.delete(endpoint, params=params if params is not None else {})
 
 
 class ModelFactory(Generic[T]):

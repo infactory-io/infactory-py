@@ -2,127 +2,362 @@ import os
 import json
 import logging
 import pathlib
+from enum import Enum
+from functools import lru_cache
+from typing import Dict, List, Optional, Union, Any, TypeVar, Callable
+
 import httpx
 import tenacity
-from typing import Dict, List, Optional, Union, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
-from infactory_client.errors import (
-    APIError, AuthenticationError, AuthorizationError, 
-    NotFoundError, ValidationError, RateLimitError, 
-    ServerError, TimeoutError
-)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger("infactory-client")
+
+# Type definitions
+T = TypeVar('T')
+ResponseType = Dict[str, Any]
+
+
+class APIErrorCode(Enum):
+    """Error codes for API responses."""
+    AUTHENTICATION = 401
+    AUTHORIZATION = 403
+    NOT_FOUND = 404
+    VALIDATION = 422
+    RATE_LIMIT = 429
+    SERVER = 500
+
+
+class APIError(Exception):
+    """Base exception for all API errors."""
+    def __init__(self, message: str, status_code: Optional[int] = None, response: Optional[httpx.Response] = None):
+        self.message = message
+        self.status_code = status_code
+        self.response = response
+        super().__init__(message)
 
 
 class ClientState(BaseModel):
-    """Represents the state of the client."""
-    user_id: Optional[str] = None
-    user_email: Optional[str] = None
-    user_name: Optional[str] = None
-    user_created_at: Optional[str] = None
-    organization_id: Optional[str] = None
-    team_id: Optional[str] = None
-    project_id: Optional[str] = None
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    """Client state with improved field documentation and defaults."""
+    user_id: Optional[str] = Field(default=None, description="User ID from authentication")
+    user_email: Optional[str] = Field(default=None, description="User email")
+    user_name: Optional[str] = Field(default=None, description="User display name")
+    user_created_at: Optional[str] = Field(default=None, description="User creation timestamp")
+    organization_id: Optional[str] = Field(default=None, description="Current organization ID")
+    team_id: Optional[str] = Field(default=None, description="Current team ID")
+    project_id: Optional[str] = Field(default=None, description="Current project ID")
+    api_key: Optional[str] = Field(default=None, description="API key for authentication")
+    base_url: Optional[str] = Field(default=None, description="Base URL for API endpoints")
+    
+    model_config = ConfigDict(extra="ignore")
 
 
 class InfactoryClient:
     """
-    The main client for interacting with the Infactory API.
+    Client for interacting with the Infactory API.
     
-    Attributes:
-        api_key (str): The API key for authentication
-        base_url (str): The base URL for the API
-        state (ClientState): The client state
+    Simplified and improved client with better error handling, caching,
+    and cleaner service initialization.
     """
+    DEFAULT_BASE_URL = "https://api.infactory.ai"
+    CONFIG_DIR_ENV_VAR = "NF_HOME"
+    API_KEY_ENV_VAR = "NF_API_KEY"
+    BASE_URL_ENV_VAR = "NF_BASE_URL"
     
-    def __init__(self, api_key: str = None, base_url: str = None):
+    def __init__(
+        self, 
+        api_key: Optional[str] = None, 
+        base_url: Optional[str] = None,
+        timeout: float = 30.0,
+        max_retries: int = 3
+    ):
         """
-        Initialize the client with optional API key and base URL.
+        Initialize the client with improved configuration options.
         
         Args:
-            api_key: The API key for authentication (optional, will use NF_API_KEY env var if not provided)
-            base_url: The base URL for the API (optional, will use NF_BASE_URL env var or default to https://api.infactory.ai/v1)
+            api_key: API key for authentication (optional)
+            base_url: Base URL for API endpoints (optional)
+            timeout: Request timeout in seconds
+            max_retries: Maximum number of retry attempts for failed requests
         """
-        self.api_key = api_key or os.getenv("NF_API_KEY")
-        self.base_url = base_url or os.getenv("NF_BASE_URL") or "https://api.infactory.ai"
-        self.state = ClientState(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
+        # Setup configuration
+        self.config_dir = self._get_config_dir()
+        self.base_url = self._resolve_base_url(base_url)
+        self.api_key = self._resolve_api_key(api_key)
+        self.timeout = timeout
+        self.max_retries = max_retries
+        
+        # Initialize state and HTTP client
+        self.state = self._load_state()
         self._http_client = None
-        self._logger = logging.getLogger(__name__)
-        self._config_dir = self._get_config_dir()
-        
-        # Load state from file if exists
-        self._load_state()
-        
-        # Services will be initialized when needed
         self._services = {}
+        
+        # Update state with current configuration
+        self.state.api_key = self.api_key
+        self.state.base_url = self.base_url
+    
+    @property
+    def http_client(self) -> httpx.Client:
+        """Lazy-loaded HTTP client."""
+        if self._http_client is None:
+            self._http_client = httpx.Client(
+                base_url=self.base_url,
+                timeout=self.timeout,
+                follow_redirects=True
+            )
+            # Set authorization header if API key is available
+            if self.api_key:
+                self._http_client.headers["Authorization"] = f"Bearer {self.api_key}"
+        return self._http_client
 
     def _get_config_dir(self) -> pathlib.Path:
-        """Get the configuration directory path."""
-        config_dir = os.getenv("NF_HOME") or os.path.expanduser("~/.infactory-client/")
+        """Get or create configuration directory."""
+        config_dir = os.getenv(self.CONFIG_DIR_ENV_VAR) or os.path.expanduser("~/.infactory-client/")
         path = pathlib.Path(config_dir)
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def _load_state(self):
-        """Load client state from file."""
-        state_file = self._config_dir / "state.json"
+    def _resolve_base_url(self, base_url: Optional[str]) -> str:
+        """Resolve base URL from parameters or environment variables."""
+        resolved_url = base_url or os.getenv(self.BASE_URL_ENV_VAR) or self.DEFAULT_BASE_URL
+        return resolved_url.rstrip('/')  # Ensure no trailing slash
+
+    def _resolve_api_key(self, api_key: Optional[str]) -> Optional[str]:
+        """Resolve API key from parameters, environment variables, or config file."""
+        if api_key:
+            return api_key
+            
+        if env_key := os.getenv(self.API_KEY_ENV_VAR):
+            return env_key
+            
+        return self._load_api_key_from_file()
+
+    def _load_api_key_from_file(self) -> Optional[str]:
+        """Load API key from configuration file."""
+        api_key_file = self.config_dir / "api_key"
+        if api_key_file.exists():
+            try:
+                return api_key_file.read_text().strip()
+            except Exception as e:
+                logger.warning(f"Failed to load API key from {api_key_file}: {e}")
+        return None
+
+    def save_api_key(self, api_key: str) -> None:
+        """Save API key to configuration file with proper permissions."""
+        api_key_file = self.config_dir / "api_key"
+        try:
+            api_key_file.write_text(api_key)
+            api_key_file.chmod(0o600)  # Secure file permissions
+            self.api_key = api_key
+            self.state.api_key = api_key
+            # Update HTTP client headers if it exists
+            if self._http_client:
+                self._http_client.headers["Authorization"] = f"Bearer {api_key}"
+        except Exception as e:
+            logger.error(f"Failed to save API key to {api_key_file}: {e}")
+            raise IOError(f"Failed to save API key: {e}")
+
+    def _load_state(self) -> ClientState:
+        """Load client state from file, with fallback to empty state."""
+        state_file = self.config_dir / "state.json"
         if state_file.exists():
             try:
-                with open(state_file, "r") as f:
-                    state_data = json.load(f)
-                    
-                # Only update missing values in state
-                for key, value in state_data.items():
-                    if getattr(self.state, key) is None:
-                        setattr(self.state, key, value)
-                
-                # If api_key is in the saved state but not provided in initialization, use it
-                if self.api_key is None and self.state.api_key is not None:
-                    self.api_key = self.state.api_key
-                    
+                state_data = json.loads(state_file.read_text())
+                return ClientState(**state_data)
             except Exception as e:
-                self._logger.warning(f"Failed to load state from {state_file}: {e}")
+                logger.warning(f"Failed to load state from {state_file}: {e}")
+        return ClientState()
 
-    def _save_state(self):
-        """Save client state to file."""
-        state_file = self._config_dir / "state.json"
+    def save_state(self) -> None:
+        """Save current client state to file."""
+        state_file = self.config_dir / "state.json"
         try:
-            with open(state_file, "w") as f:
-                json.dump(self.state.dict(exclude_none=True), f)
+            state_file.write_text(self.state.model_dump_json(exclude_none=True))
         except Exception as e:
-            self._logger.warning(f"Failed to save state to {state_file}: {e}")
+            logger.warning(f"Failed to save state to {state_file}: {e}")
 
-    @property
-    def http_client(self):
-        """Get or create the HTTP client."""
-        if self._http_client is None:
-            self._http_client = httpx.Client(
-                base_url=self.base_url,
-                timeout=30.0,
-                follow_redirects=True
-            )
-        return self._http_client
-    
-    def _set_auth_header(self):
-        """Set the authorization header for the HTTP client."""
-        if self.api_key:
-            self.http_client.headers["Authorization"] = f"Bearer {self.api_key}"
-        else:
-            raise AuthenticationError("No API key provided. Please set NF_API_KEY environment variable or provide api_key parameter.")
-    
-    def _init_services(self):
-        """Initialize service clients."""
-        from infactory_client.services import (
-            ProjectsService, DataSourcesService, DataLinesService,
-            TeamsService, OrganizationsService, UsersService,
-            QueryProgramsService, SecretsService
-        )
+    def connect(self) -> 'InfactoryClient':
+        """
+        Validate connection and authenticate with the API.
         
+        Returns:
+            The client instance for method chaining
+            
+        Raises:
+            APIError: If authentication fails
+        """
+        if not self.api_key:
+            raise APIError("No API key provided. Set via NF_API_KEY environment variable or provide api_key parameter.")
+            
+        # Test connection by getting current user info
+        try:
+            user_info = self.get("v1/authentication/me")
+            
+            # Update state with user information
+            self.state.user_id = user_info.get("id")
+            self.state.user_email = user_info.get("email") 
+            self.state.user_name = user_info.get("name")
+            self.state.user_created_at = user_info.get("created_at")
+            self.save_state()
+            
+            logger.info(f"Connected to Infactory")
+        except Exception as e:
+            raise APIError(f"Failed to connect with the provided API key: {e}")
+            
+        return self
+
+    def disconnect(self) -> None:
+        """Close HTTP client and clean up resources."""
+        if self._http_client:
+            self._http_client.close()
+            self._http_client = None
+
+    def _create_request_retry_decorator(self) -> Callable:
+        """Create request retry decorator with configured settings."""
+        return tenacity.retry(
+            stop=tenacity.stop_after_attempt(self.max_retries),
+            wait=tenacity.wait_exponential(multiplier=1, min=1, max=5),
+            retry=tenacity.retry_if_exception_type(APIError),
+            reraise=True
+        )
+
+    def _handle_response(self, response: httpx.Response) -> Dict[str, Any]:
+        """
+        Process API response and handle errors with appropriate exceptions.
+        
+        Args:
+            response: HTTP response from API
+            
+        Returns:
+            Parsed JSON response
+            
+        Raises:
+            APIError: With appropriate subtype based on status code
+        """
+        if response.is_success:
+            try:
+                return response.json()
+            except json.JSONDecodeError as e:
+                raise APIError(
+                    f"Failed to parse JSON response: {response.text}",
+                    response.status_code,
+                    response
+                )
+        
+        # Handle error responses based on status code
+        error_message = f"API request failed ({response.status_code}): {response.text}"
+        
+        if response.status_code == APIErrorCode.RATE_LIMIT.value:
+            error_message = f"Rate limit exceeded: {response.text}"
+        elif response.status_code == APIErrorCode.AUTHENTICATION.value:
+            error_message = f"Authentication failed: {response.text}"
+        elif response.status_code == APIErrorCode.AUTHORIZATION.value:
+            error_message = f"Authorization failed: {response.text}"
+        elif response.status_code == APIErrorCode.NOT_FOUND.value:
+            error_message = f"Resource not found: {response.text}"
+        elif response.status_code >= 500:
+            error_message = f"Server error: {response.text}"
+            
+        raise APIError(error_message, response.status_code, response)
+
+    def request(
+        self, 
+        method: str, 
+        endpoint: str, 
+        data: Optional[Dict[str, Any]] = None, 
+        params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Make a request to the API with automatic retry and error handling.
+        
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            endpoint: API endpoint path
+            data: Request body data for POST/PATCH requests
+            params: Query parameters
+            
+        Returns:
+            Parsed JSON response
+            
+        Raises:
+            APIError: If the request fails
+        """
+        if not self.api_key:
+            raise APIError("No API key provided")
+            
+        # Ensure endpoint is properly formatted
+        endpoint = endpoint.lstrip('/')
+        
+        # Add API key to query params if provided
+        params = params or {}
+        if self.api_key:
+            params["nf_api_key"] = self.api_key
+            
+        retry_decorator = self._create_request_retry_decorator()
+        
+        @retry_decorator
+        def make_request():
+            try:
+                response = self.http_client.request(
+                    method=method.upper(),
+                    url=endpoint,
+                    json=data if method.upper() in ('POST', 'PATCH', 'PUT') else None,
+                    params=params
+                )
+                return self._handle_response(response)
+            except httpx.TimeoutException as e:
+                raise APIError(f"Request timed out: {str(e)}")
+            except httpx.RequestError as e:
+                raise APIError(f"Request failed: {str(e)}")
+                
+        return make_request()
+
+    # Convenience methods for common HTTP verbs
+    def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Make a GET request to the API."""
+        return self.request("GET", endpoint, params=params)
+        
+    def post(self, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Make a POST request to the API."""
+        return self.request("POST", endpoint, data=data, params=params)
+        
+    def patch(self, endpoint: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Make a PATCH request to the API."""
+        return self.request("PATCH", endpoint, data=data, params=params)
+        
+    def delete(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Make a DELETE request to the API."""
+        return self.request("DELETE", endpoint, params=params)
+
+    # Context management methods
+    def __enter__(self) -> 'InfactoryClient':
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit with proper cleanup."""
+        self.disconnect()
+
+    # Service property with lazy loading
+    def _get_service(self, name: str) -> Any:
+        """Get a service by name, initializing it if necessary."""
+        if name not in self._services:
+            self._init_services()
+        return self._services[name]
+
+    def _init_services(self) -> None:
+        """Initialize service clients as needed."""
+        from infactory_client.services import (
+            ProjectsService,
+            DataSourcesService,
+            DataLinesService,
+            TeamsService,
+            OrganizationsService,
+            UsersService,
+            QueryProgramsService,
+        )
+
         self._services = {
             "projects": ProjectsService(self),
             "datasources": DataSourcesService(self),
@@ -131,356 +366,54 @@ class InfactoryClient:
             "organizations": OrganizationsService(self),
             "users": UsersService(self),
             "query_programs": QueryProgramsService(self),
-            "secrets": SecretsService(self),
+            # Add more services as needed
         }
 
-    def set_current_project(self, project_id: str):
-        """
-        Set the current project.
-        
-        Args:
-            project_id: The project ID to set as current
-        """
-        self.state.project_id = project_id
-        self._save_state()
-    
-    def set_current_organization(self, organization_id: str):
-        """
-        Set the current organization.
-        
-        Args:
-            organization_id: The organization ID to set as current
-        """
-        self.state.organization_id = organization_id
-        self._save_state()
-        
-    def set_current_team(self, team_id: str):
-        """
-        Set the current team.
-        
-        Args:
-            team_id: The team ID to set as current
-        """
-        self.state.team_id = team_id
-        self._save_state()
-    
-    def connect(self):
-        """
-        Initialize the connection to the Infactory API.
-        
-        Validates the API key and fetches the user ID.
-        
-        Returns:
-            self: For method chaining
-            
-        Raises:
-            AuthenticationError: If the API key is invalid
-        """
-        if not self.api_key:
-            raise AuthenticationError("No API key provided. Please set NF_API_KEY environment variable or provide api_key parameter.")
-        
-        # Test connection by getting current user
-        try:
-            user_info = self._get("v1/authentication/me")
-            self._logger.debug(f"User info: {user_info}")
-            is_clerk_user = user_info.get("clerk_user_id") or False
-            self.state.user_id = user_info.get("id")
-            self.state.user_email = user_info.get("email") or ("in CLERK" if is_clerk_user else "---")  
-            self.state.user_name = user_info.get("name") or ("in CLERK" if is_clerk_user else "---")
-            self.state.user_created_at = user_info.get("created_at")
-            self._save_state()
-        except Exception as e:
-            raise AuthenticationError(f"Failed to connect with the provided API key: {e}")
-        
-        return self
-    
-    def disconnect(self):
-        """Disconnect from the Infactory API."""
-        if self._http_client:
-            self._http_client.close()
-            self._http_client = None
-    
-    @tenacity.retry(
-        stop=tenacity.stop_after_attempt(3),
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=5),
-        retry=tenacity.retry_if_exception_type((RateLimitError, ServerError, TimeoutError))
-    )
-    def _get(self, endpoint: str, params: dict = None) -> dict:
-        """
-        Make a GET request to the API.
-        
-        Args:
-            endpoint: The API endpoint to call
-            params: Query parameters
-            
-        Returns:
-            The JSON response
-            
-        Raises:
-            AuthenticationError: If not authenticated
-            RateLimitError: If rate limited
-            ServerError: If server error
-            TimeoutError: If request times out
-            APIError: For other API errors
-        """
-        if not self.api_key:
-            raise AuthenticationError("No API key provided. Please set NF_API_KEY environment variable or provide api_key parameter.")
-        
-        self._set_auth_header()
-        
-        # Add API key to query params if provided
-        params = params or {}
-        if self.api_key:
-            params["nf_api_key"] = self.api_key
-        
-        try:
-            response = self.http_client.get(
-                f"{self.base_url}/{endpoint.lstrip('/')}",
-                params=params,
-            )
-            
-            return self._handle_response(response)
-                
-        except httpx.TimeoutException as e:
-            raise TimeoutError(f"Request timed out: {str(e)}") from e
-        except httpx.RequestError as e:
-            raise APIError(f"Request failed: {str(e)}") from e
-    
-    @tenacity.retry(
-        stop=tenacity.stop_after_attempt(3),
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=5),
-        retry=tenacity.retry_if_exception_type((RateLimitError, ServerError, TimeoutError))
-    )
-    def _post(self, endpoint: str, data: dict = None, params: dict = None) -> dict:
-        """
-        Make a POST request to the API.
-        
-        Args:
-            endpoint: The API endpoint to call
-            data: The request body
-            params: Query parameters
-            
-        Returns:
-            The JSON response
-            
-        Raises:
-            AuthenticationError: If not authenticated
-            RateLimitError: If rate limited
-            ServerError: If server error
-            TimeoutError: If request times out
-            APIError: For other API errors
-        """
-        if not self.api_key:
-            raise AuthenticationError("No API key provided. Please set NF_API_KEY environment variable or provide api_key parameter.")
-        
-        self._set_auth_header()
-        
-        # Add API key to query params if provided
-        params = params or {}
-        if self.api_key:
-            params["nf_api_key"] = self.api_key
-        
-        try:
-            response = self.http_client.post(
-                f"{self.base_url}/{endpoint.lstrip('/')}",
-                json=data,
-                params=params,
-            )
-            
-            return self._handle_response(response)
-                
-        except httpx.TimeoutException as e:
-            raise TimeoutError(f"Request timed out: {str(e)}") from e
-        except httpx.RequestError as e:
-            raise APIError(f"Request failed: {str(e)}") from e
-    
-    @tenacity.retry(
-        stop=tenacity.stop_after_attempt(3),
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=5),
-        retry=tenacity.retry_if_exception_type((RateLimitError, ServerError, TimeoutError))
-    )
-    def _patch(self, endpoint: str, data: dict = None, params: dict = None) -> dict:
-        """
-        Make a PATCH request to the API.
-        
-        Args:
-            endpoint: The API endpoint to call
-            data: The request body
-            params: Query parameters
-            
-        Returns:
-            The JSON response
-            
-        Raises:
-            AuthenticationError: If not authenticated
-            RateLimitError: If rate limited
-            ServerError: If server error
-            TimeoutError: If request times out
-            APIError: For other API errors
-        """
-        if not self.api_key:
-            raise AuthenticationError("No API key provided. Please set NF_API_KEY environment variable or provide api_key parameter.")
-        
-        self._set_auth_header()
-        
-        # Add API key to query params if provided
-        params = params or {}
-        if self.api_key:
-            params["nf_api_key"] = self.api_key
-        
-        try:
-            response = self.http_client.patch(
-                f"{self.base_url}/{endpoint.lstrip('/')}",
-                json=data,
-                params=params,
-            )
-            
-            return self._handle_response(response)
-                
-        except httpx.TimeoutException as e:
-            raise TimeoutError(f"Request timed out: {str(e)}") from e
-        except httpx.RequestError as e:
-            raise APIError(f"Request failed: {str(e)}") from e
-    
-    @tenacity.retry(
-        stop=tenacity.stop_after_attempt(3),
-        wait=tenacity.wait_exponential(multiplier=1, min=1, max=5),
-        retry=tenacity.retry_if_exception_type((RateLimitError, ServerError, TimeoutError))
-    )
-    def _delete(self, endpoint: str, params: dict = None) -> dict:
-        """
-        Make a DELETE request to the API.
-        
-        Args:
-            endpoint: The API endpoint to call
-            params: Query parameters
-            
-        Returns:
-            The JSON response
-            
-        Raises:
-            AuthenticationError: If not authenticated
-            RateLimitError: If rate limited
-            ServerError: If server error
-            TimeoutError: If request times out
-            APIError: For other API errors
-        """
-        if not self.api_key:
-            raise AuthenticationError("No API key provided. Please set NF_API_KEY environment variable or provide api_key parameter.")
-        
-        self._set_auth_header()
-        
-        # Add API key to query params if provided
-        params = params or {}
-        if self.api_key:
-            params["nf_api_key"] = self.api_key
-        
-        try:
-            response = self.http_client.delete(
-                f"{self.base_url}/{endpoint.lstrip('/')}",
-                params=params,
-            )
-            
-            return self._handle_response(response)
-                
-        except httpx.TimeoutException as e:
-            raise TimeoutError(f"Request timed out: {str(e)}") from e
-        except httpx.RequestError as e:
-            raise APIError(f"Request failed: {str(e)}") from e
-    
-    def _handle_response(self, response: httpx.Response) -> dict:
-        """
-        Handle the API response.
-        
-        Args:
-            response: The HTTP response
-            
-        Returns:
-            The JSON response
-            
-        Raises:
-            RateLimitError: If rate limited
-            ServerError: If server error
-            AuthenticationError: If authentication failed
-            AuthorizationError: If authorization failed
-            NotFoundError: If resource not found
-            APIError: For other API errors
-        """
-        if response.status_code == 429:
-            raise RateLimitError(f"Rate limit exceeded: {response.text}", response.status_code, response)
-        elif response.status_code >= 500:
-            raise ServerError(f"Server error: {response.text}", response.status_code, response)
-        elif response.status_code == 401:
-            raise AuthenticationError(f"Authentication failed: {response.text}", response.status_code, response)
-        elif response.status_code == 403:
-            raise AuthorizationError(f"Authorization failed: {response.text}", response.status_code, response)
-        elif response.status_code == 404:
-            raise NotFoundError(f"Resource not found: {response.text}", response.status_code, response)
-        elif response.status_code >= 400:
-            raise APIError(f"API request failed: {response.text}", response.status_code, response)
-        
-        try:
-            return response.json()
-        except json.JSONDecodeError as e:
-            raise APIError(f"Failed to parse JSON response: {response.text}", response.status_code, response) from e
-    
-    # Service property accessors
-    
+    # Service properties through proxy
     @property
     def projects(self):
-        if "projects" not in self._services:
-            self._init_services()
-        return self._services["projects"]
-    
+        return self._get_service("projects")
+
     @property
     def datasources(self):
-        if "datasources" not in self._services:
-            self._init_services()
-        return self._services["datasources"]
-    
+        return self._get_service("datasources")
+
     @property
     def datalines(self):
-        if "datalines" not in self._services:
-            self._init_services()
-        return self._services["datalines"]
-    
+        return self._get_service("datalines")
+
     @property
     def teams(self):
-        if "teams" not in self._services:
-            self._init_services()
-        return self._services["teams"]
-    
+        return self._get_service("teams")
+
     @property
     def organizations(self):
-        if "organizations" not in self._services:
-            self._init_services()
-        return self._services["organizations"]
-    
+        return self._get_service("organizations")
+
     @property
     def users(self):
-        if "users" not in self._services:
-            self._init_services()
-        return self._services["users"]
-    
+        return self._get_service("users")
+
     @property
     def query_programs(self):
-        if "query_programs" not in self._services:
-            self._init_services()
-        return self._services["query_programs"]
-    
-    @property
-    def secrets(self):
-        if "secrets" not in self._services:
-            self._init_services()
-        return self._services["secrets"]
-    
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.disconnect()
+        return self._get_service("query_programs")
+
+    # Helper methods for setting current context
+    def set_current_project(self, project_id: str) -> None:
+        """Set the current project and save state."""
+        self.state.project_id = project_id
+        self.save_state()
+
+    def set_current_organization(self, organization_id: str) -> None:
+        """Set the current organization and save state."""
+        self.state.organization_id = organization_id
+        self.save_state()
+
+    def set_current_team(self, team_id: str) -> None:
+        """Set the current team and save state."""
+        self.state.team_id = team_id
+        self.save_state()
+
 
 # Shorthand for InfactoryClient
 Client = InfactoryClient

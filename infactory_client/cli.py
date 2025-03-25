@@ -2,9 +2,7 @@
 import os
 import sys
 import json
-import getpass
 import logging
-from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -12,6 +10,7 @@ import typer
 from rich import print
 from rich.table import Table
 from rich.console import Console
+from rich.prompt import Prompt
 
 from infactory_client.client import ClientState, InfactoryClient
 from infactory_client.errors import APIError, AuthenticationError, ConfigError
@@ -24,6 +23,7 @@ app = typer.Typer(
 )
 
 # Sub-apps for different command groups
+organizations_app = typer.Typer(help="Manage organizations", no_args_is_help=True)
 projects_app = typer.Typer(help="Manage projects", no_args_is_help=True)
 datasources_app = typer.Typer(help="Manage datasources", no_args_is_help=True)
 datalines_app = typer.Typer(help="Manage datalines", no_args_is_help=True)
@@ -32,6 +32,7 @@ endpoints_app = typer.Typer(help="Manage endpoints", no_args_is_help=True)
 jobs_app = typer.Typer(help="Manage jobs", no_args_is_help=True)
 
 # Add sub-apps to main app
+app.add_typer(organizations_app, name="orgs")
 app.add_typer(projects_app, name="projects")
 app.add_typer(datasources_app, name="datasources")
 app.add_typer(datalines_app, name="datalines")
@@ -47,75 +48,10 @@ console = Console()
 
 load_dotenv()
 
-def get_config_dir() -> Path:
-    """Get the configuration directory path."""
-    config_dir = os.getenv("NF_HOME") or os.path.expanduser("~/.infactory")
-    path = Path(config_dir)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-def load_state() -> ClientState:
-    """Load client state from file."""
-    config_dir = get_config_dir()
-    state_file = config_dir / "state.json"
-
-    if state_file.exists():
-        try:
-            with open(state_file, "r") as f:
-                state_data = json.load(f)
-                return ClientState(**state_data)
-        except Exception as e:
-            logger.warning(f"Failed to load state from {state_file}: {e}")
-
-    return ClientState()
-
-def save_state(state: ClientState):
-    """Save client state to file."""
-    config_dir = get_config_dir()
-    state_file = config_dir / "state.json"
-
-    try:
-        with open(state_file, "w") as f:
-            json.dump(state.dict(exclude_none=True), f)
-    except Exception as e:
-        logger.error(f"Failed to save state to {state_file}: {e}")
-
-def save_api_key(api_key: str):
-    """Save API key to file."""
-    config_dir = get_config_dir()
-    api_key_file = config_dir / "api_key"
-
-    try:
-        with open(api_key_file, "w") as f:
-            f.write(api_key)
-        os.chmod(api_key_file, 0o600)  # Secure the file
-    except Exception as e:
-        logger.error(f"Failed to save API key to {api_key_file}: {e}")
-
-def load_api_key() -> Optional[str]:
-    """Load API key from file."""
-    config_dir = get_config_dir()
-    api_key_file = config_dir / "api_key"
-
-    if api_key_file.exists():
-        try:
-            with open(api_key_file, "r") as f:
-                return f.read().strip()
-        except Exception as e:
-            logger.warning(f"Failed to load API key from {api_key_file}: {e}")
-
-    return None
-
 def get_client() -> InfactoryClient:
     """Get an authenticated client instance."""
-    api_key = os.getenv("NF_API_KEY") or load_api_key()
 
-    if not api_key:
-        raise ConfigError(
-            "No API key found. Please login with 'nf login' or set NF_API_KEY environment variable."
-        )
-
-    client = InfactoryClient(api_key=api_key)
+    client = InfactoryClient()
 
     try:
         client.connect()
@@ -139,9 +75,21 @@ def login():
     client = InfactoryClient(api_key=api_key)
     try:
         client.connect()
-        save_api_key(api_key)
-        save_state(client.state)
-        typer.echo("API key saved successfully!")
+        client.save_api_key(api_key)
+        client.save_state()
+
+        # List organizations and set first one as active
+        try:
+            organizations = client.organizations.list()
+            if organizations:
+                first_org = organizations[0]
+                client.set_current_organization(first_org.id)
+            else:
+                typer.echo("\nNo organizations found")
+
+        except Exception as e:
+            typer.echo(f"\nWarning: Could not list organizations: {e}", err=True)
+
     except AuthenticationError:
         typer.echo("Invalid API key. Please check and try again.", err=True)
         raise typer.Exit(1)
@@ -153,8 +101,10 @@ def login():
 def logout():
     """Logout and clear all state information."""
     try:
-        # Get config directory
-        config_dir = get_config_dir()
+        # Create a temporary client to get config directory
+        client = InfactoryClient()
+        config_dir = client._get_config_dir()
+        print(f"Config directory: {config_dir}")
         state_file = config_dir / "state.json"
         api_key_file = config_dir / "api_key"
 
@@ -183,12 +133,17 @@ def logout():
 @app.command()
 def show(json_output: bool = typer.Option(False, "--json", help="Output in JSON format")):
     """Show current state including API key (masked), organization, team, and project."""
+    # Create a temporary client to get API key
+    client = InfactoryClient()
+    api_key = os.getenv("NF_API_KEY") or client._load_api_key_from_file()
+
+    if not api_key:
+        typer.echo("Configuration error: No API key found. Please login with 'nf login' or set NF_API_KEY environment variable.", err=True)
+        raise typer.Exit(1)
+
     try:
         # Try to get client with current API key
         client = get_client()
-
-        # Get the API key (either from env or from saved file)
-        api_key = os.getenv("NF_API_KEY") or load_api_key()
 
         # Format API key for display (show only first and last few characters)
         masked_api_key = (
@@ -346,6 +301,90 @@ def set_team(team_id: str):
         typer.echo(f"Current team set to {team.name} (ID: {team.id})")
     except Exception as e:
         typer.echo(f"Failed to set team: {e}", err=True)
+        raise typer.Exit(1)
+
+@organizations_app.command(name="list")
+def organizations_list(
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format")
+):
+    """List organizations the user has access to."""
+    client = get_client()
+
+    try:
+        organizations = client.organizations.list()
+
+        if not organizations:
+            typer.echo("No organizations found")
+            return
+
+        if json_output:
+            org_data = [
+                {
+                    "id": org.id,
+                    "name": org.name,
+                    "is_current": org.id == client.state.organization_id
+                }
+                for org in organizations
+            ]
+            print(json.dumps(org_data, indent=2))
+            return
+
+        table = Table()
+        table.add_column("ID")
+        table.add_column("Name")
+        table.add_column("Current", justify="center")
+
+        for org in organizations:
+            is_current = "✓" if org.id == client.state.organization_id else ""
+            table.add_row(org.id, org.name, is_current)
+
+        console.print(table)
+
+    except Exception as e:
+        typer.echo(f"Failed to list organizations: {e}", err=True)
+        raise typer.Exit(1)
+
+@organizations_app.command(name="select")
+def organizations_select():
+    """Interactively select an organization to set as current."""
+    client = get_client()
+
+    try:
+        organizations = client.organizations.list()
+
+        if not organizations:
+            typer.echo("No organizations found")
+            return
+
+        # Create a list of choices
+        choices = {str(i): org for i, org in enumerate(organizations, 1)}
+        
+        # Display organizations with numbers
+        table = Table()
+        table.add_column("#")
+        table.add_column("ID")
+        table.add_column("Name")
+        table.add_column("Current", justify="center")
+
+        for num, org in choices.items():
+            is_current = "✓" if org.id == client.state.organization_id else ""
+            table.add_row(num, org.id, org.name, is_current)
+
+        console.print(table)
+
+        # Prompt for selection
+        choice = Prompt.ask(
+            "\nSelect organization number",
+            choices=list(choices.keys()),
+            show_choices=False
+        )
+
+        selected_org = choices[choice]
+        client.set_current_organization(selected_org.id)
+        typer.echo(f"\nCurrent organization set to {selected_org.name} (ID: {selected_org.id})")
+
+    except Exception as e:
+        typer.echo(f"Failed to select organization: {e}", err=True)
         raise typer.Exit(1)
 
 @projects_app.command(name="list")

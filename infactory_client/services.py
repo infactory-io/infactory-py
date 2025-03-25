@@ -6,7 +6,7 @@ from pathlib import Path
 from infactory_client.base import BaseService, ModelFactory
 from infactory_client.models import (
     Project, Team, Organization, User, DataSource, DataLine, 
-    QueryProgram, Secret, Credential, TeamMembership
+    QueryProgram
 )
 
 
@@ -121,7 +121,7 @@ class ProjectsService(BaseService):
         # If the deleted project is the current one, clear it from state
         if self.client.state.project_id == project_id:
             self.client.state.project_id = None
-            self.client._save_state()
+            self.client.save_state()
         
         return self.factory.create(response)
     
@@ -516,7 +516,7 @@ class TeamsService(BaseService):
         # If the deleted team is the current one, clear it from state
         if self.client.state.team_id == team_id:
             self.client.state.team_id = None
-            self.client._save_state()
+            self.client.save_state()
             
         return self.factory.create(response)
     
@@ -543,7 +543,7 @@ class OrganizationsService(BaseService):
         super().__init__(client)
         self.factory = ModelFactory(Organization)
     
-    def list(self, platform_id: str = None) -> List[Organization]:
+    def list(self, platform_id: Optional[str] = None) -> List[Organization]:
         """
         List organizations.
         
@@ -557,7 +557,7 @@ class OrganizationsService(BaseService):
         if platform_id:
             params["platform_id"] = platform_id
             
-        response = self._get("v1/orgs", params)
+        response = self.client.get("v1/orgs", params)
         return self.factory.create_list(response)
     
     def get(self, organization_id: str) -> Organization:
@@ -656,7 +656,7 @@ class OrganizationsService(BaseService):
         # If the deleted organization is the current one, clear it from state
         if self.client.state.organization_id == organization_id:
             self.client.state.organization_id = None
-            self.client._save_state()
+            self.client.save_state()
             
         return self.factory.create(response)
     
