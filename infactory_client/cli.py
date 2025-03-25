@@ -612,7 +612,10 @@ def datasource_create(
 
 @datalines_app.command(name="list")
 def datalines_list(
-    project_id: str | None = typer.Option(None, help="Project ID to list datalines for")
+    project_id: str | None = typer.Option(
+        None, help="Project ID to list datalines for"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """List datalines."""
     client = get_client()
@@ -632,13 +635,32 @@ def datalines_list(
             typer.echo("No datalines found")
             return
 
+        if json_output:
+            datalines_data = [
+                {
+                    "id": dl.id,
+                    "name": dl.name
+                    or dl.data_model.get("schemaT", {}).get("name", dl.name),
+                    # "data_model": dl.data_model,
+                    # "schema_code": dl.schema_code,
+                    "project_id": dl.project_id,
+                    "dataobject_id": dl.dataobject_id,
+                    # "created_at": dl.created_at,
+                    # "updated_at": dl.updated_at,
+                    # "deleted_at": dl.deleted_at,
+                }
+                for dl in datalines
+            ]
+            print(json.dumps(datalines_data))
+            return
+
         table = Table()
         table.add_column("ID")
         table.add_column("Name")
 
         for dl in datalines:
             name = dl.name
-            if dl.data_model.get("schemaT"):
+            if dl.data_model and dl.data_model.get("schemaT"):
                 name = dl.data_model["schemaT"].get("name", name) or name
             table.add_row(dl.id, name)
 
@@ -660,16 +682,15 @@ def datalines_select(
     if model and code:
         typer.echo("Error: --model and --code cannot be used together", err=True)
         raise typer.Exit(1)
-    if not model and not code:
-        model = True
+
+    if not client.state.project_id:
+        typer.echo(
+            "No project selected. Please select a project first with 'nf projects select'",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     try:
-        if not client.state.project_id:
-            typer.echo(
-                "No project selected. Please select a project first with 'nf projects select'"
-            )
-            return
-
         datalines = client.datalines.list(project_id=client.state.project_id)
 
         if not datalines:
@@ -686,10 +707,7 @@ def datalines_select(
         table.add_column("Name")
 
         for num, dl in choices.items():
-            name = dl.name
-            if dl.data_model.get("schemaT"):
-                name = dl.data_model["schemaT"].get("name", name) or name
-            table.add_row(num, dl.id, name)
+            table.add_row(num, dl.id, dl.name)
 
         console.print(table)
 
@@ -703,12 +721,12 @@ def datalines_select(
         selected_dataline = choices[choice]
 
         if model and selected_dataline.data_model:
-            typer.echo(json.dumps(selected_dataline.data_model, indent=2))
+            print(json.dumps(selected_dataline.data_model, indent=2))
         elif code and selected_dataline.schema_code:
-            typer.echo(selected_dataline.schema_code)
+            print(selected_dataline.schema_code)
         else:
             typer.echo(
-                f"Dataline: {selected_dataline.name} (ID: {selected_dataline.id})"
+                f"\nSelected dataline: {selected_dataline.name} (ID: {selected_dataline.id})"
             )
 
     except Exception as e:
@@ -725,13 +743,11 @@ def datalines_get(
     """Get a dataline by ID."""
     client = get_client()
 
-    if model and code:
-        typer.echo("Error: --model and --code cannot be used together", err=True)
-        raise typer.Exit(1)
-    if not model and not code:
-        model = True
-
     try:
+        if model and code:
+            typer.echo("Error: --model and --code cannot be used together", err=True)
+            raise typer.Exit(1)
+
         dataline = client.datalines.get(dataline_id)
 
         if model and dataline.data_model:

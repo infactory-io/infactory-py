@@ -398,6 +398,217 @@ class TestCLIResources(unittest.TestCase):
         self.assertIn("Type: mysql", result.stdout)
         self.assertIn("URI:", result.stdout)
 
+    def test_datalines_list(self):
+        """Test dataline listing"""
+        # First select an organization, team, and project
+        result = self.runner.invoke(app, ["orgs", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        orgs_data = json.loads(result.stdout)
+
+        if not orgs_data:
+            self.skipTest("No organizations available for testing")
+
+        # Set organization
+        org_id = orgs_data[0]["id"]
+        result = self.runner.invoke(app, ["orgs", "set", org_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set team
+        result = self.runner.invoke(app, ["teams", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        teams_data = json.loads(result.stdout)
+
+        if not teams_data:
+            self.skipTest("No teams available for testing")
+
+        team_id = teams_data[0]["id"]
+        result = self.runner.invoke(app, ["teams", "set", team_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set project
+        result = self.runner.invoke(app, ["projects", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        projects_data = json.loads(result.stdout)
+
+        if not projects_data:
+            self.skipTest("No projects available for testing")
+
+        project_id = projects_data[0]["id"]
+        result = self.runner.invoke(app, ["projects", "set", project_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Test datalines list without project ID (using current project)
+        result = self.runner.invoke(app, ["datalines", "list"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("ID", result.stdout)
+        self.assertIn("Name", result.stdout)
+
+        # Test datalines list with explicit project ID
+        result = self.runner.invoke(
+            app, ["datalines", "list", "--project-id", project_id]
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("ID", result.stdout)
+        self.assertIn("Name", result.stdout)
+
+        # Test JSON output
+        result = self.runner.invoke(app, ["datalines", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        if "No datalines found" not in result.stdout:
+            datalines_data = json.loads(result.stdout)
+            self.assertIsInstance(datalines_data, list)
+            if datalines_data:  # If there are datalines
+                self.assertIn("id", datalines_data[0])
+                self.assertIn("name", datalines_data[0])
+
+        # Test JSON output with explicit project ID
+        result = self.runner.invoke(
+            app, ["datalines", "list", "--json", "--project-id", project_id]
+        )
+        self.assertEqual(result.exit_code, 0)
+        if "No datalines found" not in result.stdout:
+            datalines_data = json.loads(result.stdout)
+            self.assertIsInstance(datalines_data, list)
+            if datalines_data:  # If there are datalines
+                self.assertIn("id", datalines_data[0])
+                self.assertIn("name", datalines_data[0])
+
+    def test_datalines_get(self):
+        """Test getting a dataline by ID"""
+        # First select an organization, team, and project
+        result = self.runner.invoke(app, ["orgs", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        orgs_data = json.loads(result.stdout)
+
+        if not orgs_data:
+            self.skipTest("No organizations available for testing")
+
+        # Set organization
+        org_id = orgs_data[0]["id"]
+        result = self.runner.invoke(app, ["orgs", "set", org_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set team
+        result = self.runner.invoke(app, ["teams", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        teams_data = json.loads(result.stdout)
+
+        if not teams_data:
+            self.skipTest("No teams available for testing")
+
+        team_id = teams_data[0]["id"]
+        result = self.runner.invoke(app, ["teams", "set", team_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set project
+        result = self.runner.invoke(app, ["projects", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        projects_data = json.loads(result.stdout)
+
+        if not projects_data:
+            self.skipTest("No projects available for testing")
+
+        project_id = projects_data[0]["id"]
+        result = self.runner.invoke(app, ["projects", "set", project_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # First get a list of datalines
+        result = self.runner.invoke(app, ["datalines", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+
+        datalines = json.loads(result.stdout)
+
+        # If we have datalines, test get command
+        if len(datalines) > 0:
+            # Get the first dataline ID from the output
+            dataline_id = datalines[0]["id"]
+
+            # Test basic get
+            result = self.runner.invoke(app, ["datalines", "get", dataline_id])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn(dataline_id, result.stdout)
+
+            # Test get with --model flag
+            result = self.runner.invoke(
+                app, ["datalines", "get", dataline_id, "--model"]
+            )
+            self.assertEqual(result.exit_code, 0)
+            # Note: We can't guarantee valid JSON output as it depends on the data
+
+            # Test get with --code flag
+            result = self.runner.invoke(
+                app, ["datalines", "get", dataline_id, "--code"]
+            )
+            self.assertEqual(result.exit_code, 0)
+            # Note: We can't guarantee schema code exists
+
+            # Test error case: model and code flags together
+            result = self.runner.invoke(
+                app, ["datalines", "get", dataline_id, "--model", "--code"]
+            )
+            self.assertEqual(result.exit_code, 1)
+            self.assertIn(
+                "Error: --model and --code cannot be used together", result.stdout
+            )
+
+            # Test error case: invalid ID
+            result = self.runner.invoke(app, ["datalines", "get", "invalid-id"])
+            self.assertNotEqual(result.exit_code, 0)
+        else:
+            self.skipTest("No datalines available for testing")
+
+    def test_datalines_select(self):
+        """Test interactive dataline selection"""
+        # First select an organization, team, and project
+        result = self.runner.invoke(app, ["orgs", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        orgs_data = json.loads(result.stdout)
+
+        if not orgs_data:
+            self.skipTest("No organizations available for testing")
+
+        # Set organization
+        org_id = orgs_data[0]["id"]
+        result = self.runner.invoke(app, ["orgs", "set", org_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set team
+        result = self.runner.invoke(app, ["teams", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        teams_data = json.loads(result.stdout)
+
+        if not teams_data:
+            self.skipTest("No teams available for testing")
+
+        team_id = teams_data[0]["id"]
+        result = self.runner.invoke(app, ["teams", "set", team_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Get and set project
+        result = self.runner.invoke(app, ["projects", "list", "--json"])
+        self.assertEqual(result.exit_code, 0)
+        projects_data = json.loads(result.stdout)
+
+        if not projects_data:
+            self.skipTest("No projects available for testing")
+
+        project_id = projects_data[0]["id"]
+        result = self.runner.invoke(app, ["projects", "set", project_id])
+        self.assertEqual(result.exit_code, 0)
+
+        # Test error case: model and code flags together
+        result = self.runner.invoke(app, ["datalines", "select", "--model", "--code"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn(
+            "Error: --model and --code cannot be used together", result.stdout
+        )
+
+        # Test basic select command (will show prompt but not proceed due to no input)
+        result = self.runner.invoke(app, ["datalines", "select"])
+        if "No datalines found" in result.stdout:
+            self.skipTest("No datalines available for testing")
+        self.assertIn("Select dataline number", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
