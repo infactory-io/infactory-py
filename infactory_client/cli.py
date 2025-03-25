@@ -29,6 +29,7 @@ datalines_app = typer.Typer(help="Manage datalines", no_args_is_help=True)
 query_app = typer.Typer(help="Manage query programs", no_args_is_help=True)
 endpoints_app = typer.Typer(help="Manage endpoints", no_args_is_help=True)
 jobs_app = typer.Typer(help="Manage jobs", no_args_is_help=True)
+teams_app = typer.Typer(help="Manage teams", no_args_is_help=True)
 
 # Add sub-apps to main app
 app.add_typer(organizations_app, name="orgs")
@@ -38,6 +39,7 @@ app.add_typer(datalines_app, name="datalines")
 app.add_typer(query_app, name="query")
 app.add_typer(endpoints_app, name="endpoints")
 app.add_typer(jobs_app, name="jobs")
+app.add_typer(teams_app, name="teams")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -214,7 +216,7 @@ def show(  # noqa: C901
             return
 
         # Create a table for better formatting
-        table = Table(title="Current State", show_header=False)
+        table = Table(title="Infactory CLI", show_header=False)
         table.add_column("Setting")
         table.add_column("Value")
 
@@ -406,7 +408,8 @@ def organizations_select():
 
 @projects_app.command(name="list")
 def projects_list(
-    team_id: str | None = typer.Option(None, help="Team ID to list projects for")
+    team_id: str | None = typer.Option(None, help="Team ID to list projects for"),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """List projects."""
     client = get_client()
@@ -427,16 +430,31 @@ def projects_list(
             typer.echo("No projects found")
             return
 
+        if json_output:
+            project_data = [
+                {
+                    "id": project.id,
+                    "name": project.name,
+                    "description": project.description,
+                    "is_current": project.id == client.state.project_id,
+                }
+                for project in projects
+            ]
+            print(json.dumps(project_data, indent=2))
+            return
+
         table = Table()
         table.add_column("ID")
         table.add_column("Name")
         table.add_column("Description")
+        table.add_column("Current", justify="center")
 
         for project in projects:
             description = project.description or ""
             if len(description) > 47:
                 description = description[:47] + "..."
-            table.add_row(project.id, project.name, description)
+            is_current = "✓" if project.id == client.state.project_id else ""
+            table.add_row(project.id, project.name, description, is_current)
 
         console.print(table)
 
@@ -445,36 +463,59 @@ def projects_list(
         raise typer.Exit(1)
 
 
-@projects_app.command(name="create")
-def project_create(
-    name: str,
-    team_id: str | None = typer.Option(None, help="Team ID to create project in"),
-    description: str | None = typer.Option(None, help="Project description"),
-):
-    """Create a new project."""
+@projects_app.command(name="select")
+def projects_select():
+    """Interactively select a project to set as current."""
     client = get_client()
 
     try:
-        if not team_id and not client.state.team_id:
+        if not client.state.team_id:
             typer.echo(
-                "No team ID provided. Please specify --team-id or set a current team.",
-                err=True,
+                "No team selected. Please select a team first with 'nf teams select'"
             )
-            raise typer.Exit(1)
+            return
 
-        team_id = team_id or client.state.team_id
-        project = client.projects.create(
-            name=name, team_id=team_id, description=description
+        projects = client.projects.list(team_id=client.state.team_id)
+
+        if not projects:
+            typer.echo("No projects found")
+            return
+
+        # Create a list of choices
+        choices = {str(i): project for i, project in enumerate(projects, 1)}
+
+        # Display projects with numbers
+        table = Table()
+        table.add_column("#")
+        table.add_column("ID")
+        table.add_column("Name")
+        table.add_column("Description")
+        table.add_column("Current", justify="center")
+
+        for num, project in choices.items():
+            description = project.description or ""
+            if len(description) > 47:
+                description = description[:47] + "..."
+            is_current = "✓" if project.id == client.state.project_id else ""
+            table.add_row(num, project.id, project.name, description, is_current)
+
+        console.print(table)
+
+        # Prompt for selection
+        choice = Prompt.ask(
+            "\nSelect project number",
+            choices=list(choices.keys()),
+            show_choices=False,
         )
 
-        typer.echo("Project created successfully!")
-        typer.echo(f"ID: {project.id}")
-        typer.echo(f"Name: {project.name}")
-        if project.description:
-            typer.echo(f"Description: {project.description}")
+        selected_project = choices[choice]
+        client.set_current_project(selected_project.id)
+        typer.echo(
+            f"\nCurrent project set to {selected_project.name} (ID: {selected_project.id})"
+        )
 
     except Exception as e:
-        typer.echo(f"Failed to create project: {e}", err=True)
+        typer.echo(f"Failed to select project: {e}", err=True)
         raise typer.Exit(1)
 
 
@@ -856,6 +897,94 @@ def jobs_subscribe(datasource_id: str):
 
     except Exception as e:
         typer.echo(f"Failed to subscribe to jobs: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@teams_app.command(name="list")
+def teams_list(
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format")
+):
+    """List teams the user has access to."""
+    client = get_client()
+
+    try:
+        teams = client.teams.list()
+
+        if not teams:
+            typer.echo("No teams found")
+            return
+
+        if json_output:
+            team_data = [
+                {
+                    "id": team.id,
+                    "name": team.name,
+                    "is_current": team.id == client.state.team_id,
+                }
+                for team in teams
+            ]
+            print(json.dumps(team_data, indent=2))
+            return
+
+        table = Table()
+        table.add_column("ID")
+        table.add_column("Name")
+        table.add_column("Current", justify="center")
+
+        for team in teams:
+            is_current = "✓" if team.id == client.state.team_id else ""
+            table.add_row(team.id, team.name, is_current)
+
+        console.print(table)
+
+    except Exception as e:
+        typer.echo(f"Failed to list teams: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@teams_app.command(name="select")
+def teams_select():
+    """Interactively select a team to set as current."""
+    client = get_client()
+
+    try:
+        teams = client.teams.list()
+
+        if not teams:
+            typer.echo("No teams found")
+            return
+
+        # Create a list of choices
+        choices = {str(i): team for i, team in enumerate(teams, 1)}
+
+        # Display teams with numbers
+        table = Table()
+        table.add_column("#")
+        table.add_column("ID")
+        table.add_column("Name")
+        table.add_column("Current", justify="center")
+
+        for num, team in choices.items():
+            is_current = "✓" if team.id == client.state.team_id else ""
+            table.add_row(num, team.id, team.name, is_current)
+
+        console.print(table)
+
+        # Prompt for selection
+        choice = Prompt.ask(
+            "\nSelect team number",
+            choices=list(choices.keys()),
+            show_choices=False,
+        )
+
+        selected_team = choices[choice]
+        client.set_current_team(selected_team.id)
+        typer.echo(
+            f"\nCurrent team set to {selected_team.name} (ID: {selected_team.id})"
+        )
+
+    except Exception as e:
+        typer.echo(f"Failed to select team: {e}", err=True)
         raise typer.Exit(1)
 
 
