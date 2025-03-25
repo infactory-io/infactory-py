@@ -798,7 +798,7 @@ def query_programs_list(
         table.add_column("Question")
 
         for qp in query_programs:
-            question = qp.question or ""
+            question = qp.query or ""
             if len(question) > 47:
                 question = question[:47] + "..."
             table.add_row(

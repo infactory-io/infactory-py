@@ -102,8 +102,8 @@ class QueryProgram(BaseModel):
 
     id: str
     name: str | None = None
-    question: str | None = None
-    code: str | None = None
+    query: str | None = None
+    query_program: str | None = None
     dataline_id: str | None = None
     project_id: str | None = None
     created_at: datetime | None = None
@@ -112,6 +112,12 @@ class QueryProgram(BaseModel):
     published: bool | None = False
     public: bool | None = False
     metadata: dict[str, Any] | None = None
+    steps: str | None = None
+    slots: str | None = None
+    stores: str | None = None
+    reason: str | None = None
+    prev_id: str | None = None
+    ontologyId: str | None = None
 
 
 class Secret(BaseModel):
