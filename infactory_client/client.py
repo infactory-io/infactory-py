@@ -40,7 +40,7 @@ class InfactoryClient:
         
         Args:
             api_key: The API key for authentication (optional, will use NF_API_KEY env var if not provided)
-            base_url: The base URL for the API (optional, will use NF_BASE_URL env var or default to https://i7y.dev/v1)
+            base_url: The base URL for the API (optional, will use NF_BASE_URL env var or default to https://api.infactory.ai/v1)
         """
         self.api_key = api_key or os.getenv("NF_API_KEY")
         self.base_url = base_url or os.getenv("NF_BASE_URL") or "https://api.infactory.ai"

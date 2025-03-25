@@ -95,7 +95,7 @@ Results:
 $ nf query publish qp-789ghi
 Publishing query program qp-789ghi...
 Query program published successfully!
-Endpoint URL: https://i7y.dev/v1/live/monthly-sales/v1/data
+Endpoint URL: https://api.infactory.ai/v1/live/monthly-sales/v1/data
 ```
 
 ### 7. Display the available endpoints
@@ -117,7 +117,7 @@ $ nf endpoints list --project-id my-project-id
 $ nf endpoints curl-example ep-123abc
 CURL example for endpoint ep-123abc:
 
-curl -X GET "https://i7y.dev/v1/live/monthly-sales/v1/data" \
+curl -X GET "https://api.infactory.ai/v1/live/monthly-sales/v1/data" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json"
 ```
@@ -250,7 +250,7 @@ endpoints = client.apis.get_endpoints(api.id)
 
 for ep in endpoints:
     print(f"Endpoint: {ep.name}")
-    print(f"URL: https://i7y.dev/v1/live/{api.slug}/{api.version}/{ep.path}")
+    print(f"URL: https://api.infactory.ai/v1/live/{api.slug}/{api.version}/{ep.path}")
     print(f"Method: {ep.http_method}")
     print(f"Description: {ep.description}")
     print("-" * 50)
