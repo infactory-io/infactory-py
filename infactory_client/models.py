@@ -1,7 +1,8 @@
+import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class Project(BaseModel):
@@ -43,6 +44,17 @@ class DataLine(BaseModel):
     updated_at: datetime | None = None
     deleted_at: datetime | None = None
     data_model: dict[str, Any] | None = None
+
+    @field_validator("data_model", mode="before")
+    @classmethod
+    def parse_data_model(cls, v):
+        """Parse data_model if it's a JSON string."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
 
 
 class Team(BaseModel):

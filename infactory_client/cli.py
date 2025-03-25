@@ -637,12 +637,112 @@ def datalines_list(
         table.add_column("Name")
 
         for dl in datalines:
-            table.add_row(dl.id, dl.name)
+            name = dl.name
+            if dl.data_model.get("schemaT"):
+                name = dl.data_model["schemaT"].get("name", name) or name
+            table.add_row(dl.id, name)
 
         console.print(table)
 
     except Exception as e:
         typer.echo(f"Failed to list datalines: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@datalines_app.command(name="select")
+def datalines_select(
+    model: bool = typer.Option(False, "--model", help="Show data model as JSON"),
+    code: bool = typer.Option(False, "--code", help="Show schema code"),
+):
+    """Interactively select a dataline and show its details."""
+    client = get_client()
+
+    if model and code:
+        typer.echo("Error: --model and --code cannot be used together", err=True)
+        raise typer.Exit(1)
+    if not model and not code:
+        model = True
+
+    try:
+        if not client.state.project_id:
+            typer.echo(
+                "No project selected. Please select a project first with 'nf projects select'"
+            )
+            return
+
+        datalines = client.datalines.list(project_id=client.state.project_id)
+
+        if not datalines:
+            typer.echo("No datalines found")
+            return
+
+        # Create a list of choices
+        choices = {str(i): dl for i, dl in enumerate(datalines, 1)}
+
+        # Display datalines with numbers
+        table = Table()
+        table.add_column("#")
+        table.add_column("ID")
+        table.add_column("Name")
+
+        for num, dl in choices.items():
+            name = dl.name
+            if dl.data_model.get("schemaT"):
+                name = dl.data_model["schemaT"].get("name", name) or name
+            table.add_row(num, dl.id, name)
+
+        console.print(table)
+
+        # Prompt for selection
+        choice = Prompt.ask(
+            "\nSelect dataline number",
+            choices=list(choices.keys()),
+            show_choices=False,
+        )
+
+        selected_dataline = choices[choice]
+
+        if model and selected_dataline.data_model:
+            typer.echo(json.dumps(selected_dataline.data_model, indent=2))
+        elif code and selected_dataline.schema_code:
+            typer.echo(selected_dataline.schema_code)
+        else:
+            typer.echo(
+                f"Dataline: {selected_dataline.name} (ID: {selected_dataline.id})"
+            )
+
+    except Exception as e:
+        typer.echo(f"Failed to select dataline: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@datalines_app.command(name="get")
+def datalines_get(
+    dataline_id: str,
+    model: bool = typer.Option(False, "--model", help="Show data model as JSON"),
+    code: bool = typer.Option(False, "--code", help="Show schema code"),
+):
+    """Get a dataline by ID."""
+    client = get_client()
+
+    if model and code:
+        typer.echo("Error: --model and --code cannot be used together", err=True)
+        raise typer.Exit(1)
+    if not model and not code:
+        model = True
+
+    try:
+        dataline = client.datalines.get(dataline_id)
+
+        if model and dataline.data_model:
+            print(json.dumps(dataline.data_model, indent=2))
+        elif code and dataline.schema_code:
+            print(dataline.schema_code)
+        else:
+            typer.echo(f"Dataline: {dataline.name} (ID: {dataline.id})")
+
+    except Exception as e:
+        typer.echo(f"Failed to get dataline: {e}", err=True)
         raise typer.Exit(1)
 
 
