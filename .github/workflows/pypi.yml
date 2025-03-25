@@ -16,24 +16,24 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Install Poetry
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           poetry --version
-      
+
       - name: Install dependencies
         run: poetry install --only main
-      
+
       - name: Build package
         run: poetry build
-      
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist/ 
+          packages-dir: dist/

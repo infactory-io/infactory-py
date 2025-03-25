@@ -1,144 +1,163 @@
-from typing import Dict, List, Optional, Union, Any
+import json
 from datetime import datetime
-from pydantic import BaseModel, Field
+from typing import Any
+
+from pydantic import BaseModel, field_validator
 
 
 class Project(BaseModel):
     """Project model."""
-    
+
     id: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     team_id: str
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class DataSource(BaseModel):
     """Data source model."""
-    
+
     id: str
     name: str
-    type: Optional[str] = None
-    uri: Optional[str] = None
+    type: str | None = None
+    uri: str | None = None
     project_id: str
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class DataLine(BaseModel):
     """Data line model."""
-    
+
     id: str
     name: str
-    dataobject_id: Optional[str] = None
-    schema_code: Optional[str] = None
+    dataobject_id: str | None = None
+    schema_code: str | None = None
     project_id: str
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
-    data_model: Optional[Dict[str, Any]] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    data_model: dict[str, Any] | None = None
+
+    @field_validator("data_model", mode="before")
+    @classmethod
+    def parse_data_model(cls, v):
+        """Parse data_model if it's a JSON string."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
 
 
 class Team(BaseModel):
     """Team model."""
-    
+
     id: str
     name: str
     organization_id: str
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class Organization(BaseModel):
     """Organization model."""
-    
+
     id: str
     name: str
-    description: Optional[str] = None
-    platform_id: Optional[str] = None
-    clerk_org_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    description: str | None = None
+    platform_id: str | None = None
+    clerk_org_id: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class User(BaseModel):
     """User model."""
-    
+
     id: str
     email: str
-    name: Optional[str] = None
-    organization_id: Optional[str] = None
-    role: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    name: str | None = None
+    organization_id: str | None = None
+    role: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class QueryProgram(BaseModel):
     """Query program model."""
-    
+
     id: str
-    name: Optional[str] = None
-    question: Optional[str] = None
-    code: Optional[str] = None
-    dataline_id: Optional[str] = None
-    project_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
-    published: Optional[bool] = False
-    public: Optional[bool] = False
-    metadata: Optional[Dict[str, Any]] = None
+    name: str | None = None
+    query: str | None = None
+    query_program: str | None = None
+    dataline_id: str | None = None
+    project_id: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    published: bool | None = False
+    public: bool | None = False
+    metadata: dict[str, Any] | None = None
+    steps: str | None = None
+    slots: str | None = None
+    stores: str | None = None
+    reason: str | None = None
+    prev_id: str | None = None
+    ontologyId: str | None = None
 
 
 class Secret(BaseModel):
     """Secret model."""
-    
-    id: Optional[str] = None
+
+    id: str | None = None
     name: str
-    value: Optional[str] = None
-    type: Optional[str] = None
-    description: Optional[str] = None
+    value: str | None = None
+    type: str | None = None
+    description: str | None = None
     team_id: str
-    credentials_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    credentials_id: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class Credential(BaseModel):
     """Credential model."""
-    
+
     id: str
     name: str
     type: str
-    organization_id: Optional[str] = None
-    team_id: Optional[str] = None
-    datasource_id: Optional[str] = None
-    infrastructure_id: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
+    organization_id: str | None = None
+    team_id: str | None = None
+    datasource_id: str | None = None
+    infrastructure_id: str | None = None
+    metadata: dict[str, Any] | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
 
 
 class TeamMembership(BaseModel):
     """Team membership model."""
-    
+
     user_id: str
     team_id: str
     role: str
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    deleted_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None

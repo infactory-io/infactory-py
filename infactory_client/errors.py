@@ -24,46 +24,30 @@ class APIError(Exception):
 class AuthenticationError(APIError):
     """Raised when authentication fails."""
 
-    pass
-
 
 class AuthorizationError(APIError):
     """Raised when the user doesn't have permission to access a resource."""
-
-    pass
 
 
 class NotFoundError(APIError):
     """Raised when a resource is not found."""
 
-    pass
-
 
 class ValidationError(APIError):
     """Raised when request validation fails."""
-
-    pass
 
 
 class RateLimitError(APIError):
     """Raised when rate limit is exceeded."""
 
-    pass
-
 
 class ServerError(APIError):
     """Raised when the server returns a 5xx error."""
-
-    pass
 
 
 class TimeoutError(APIError):
     """Raised when a request times out."""
 
-    pass
-
 
 class ConfigError(Exception):
     """Raised when there is an issue with the configuration."""
-
-    pass
