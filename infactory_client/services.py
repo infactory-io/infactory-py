@@ -267,16 +267,17 @@ class DataSourcesService(BaseService):
         response = self._delete(f"v1/datasources/{datasource_id}", params)
         return self.factory.create(response)
 
-    def upload(
+    def load_data(
         self,
         datasource_id: str,
         file_path: str,
         project_id: str | None = None,
         source_url: str | None = None,
         file_type: str | None = None,
+        job_id: str | None = None,
     ) -> dict:
         """
-        Upload a file to a data source.
+        Upload a file to a data source using the load_data endpoint.
 
         Args:
             datasource_id: The data source ID
@@ -284,6 +285,7 @@ class DataSourcesService(BaseService):
             project_id: The project ID (uses current project if not specified)
             source_url: Source URL (optional)
             file_type: File type (optional)
+            job_id: Job ID for tracking progress (optional)
 
         Returns:
             Upload response
@@ -293,23 +295,69 @@ class DataSourcesService(BaseService):
             if project_id is None:
                 raise ValueError("No project_id provided and no current project set")
 
-        params = {"project_id": project_id}
-
+        # Prepare query parameters
+        params = {}
+        if job_id:
+            params["job_id"] = job_id
         if source_url:
             params["source_url"] = source_url
-
         if file_type:
             params["file_type"] = file_type
 
+        # Add API key to query params if needed
+        if self.client.api_key:
+            params["nf_api_key"] = self.client.api_key
+
+        # Prepare the file for upload
         with open(file_path, "rb") as f:
+            # Using httpx directly to handle the multipart/form-data properly
             files = {"file": (os.path.basename(file_path), f)}
+            form = {"datasource_id": datasource_id}
+
             response = self.client.http_client.post(
-                f"{self.client.base_url}/v1/datasources/{datasource_id}/upload",
+                f"{self.client.base_url}/v1/actions/load/{project_id}",
                 params=params,
                 files=files,
+                data=form,
             )
 
             return self.client._handle_response(response)
+
+    # Keep the original method for backward compatibility
+    def upload(
+        self,
+        datasource_id: str,
+        file_path: str,
+        project_id: str | None = None,
+        source_url: str | None = None,
+        file_type: str | None = None,
+        job_id: str | None = None,
+    ) -> dict:
+        """
+        Upload a file to a data source.
+
+        This method is kept for backward compatibility.
+        It calls the new load_data method internally.
+
+        Args:
+            datasource_id: The data source ID
+            file_path: Path to the file to upload
+            project_id: The project ID (uses current project if not specified)
+            source_url: Source URL (optional)
+            file_type: File type (optional)
+            job_id: Job ID for tracking progress (optional)
+
+        Returns:
+            Upload response
+        """
+        return self.load_data(
+            datasource_id=datasource_id,
+            file_path=file_path,
+            project_id=project_id,
+            source_url=source_url,
+            file_type=file_type,
+            job_id=job_id,
+        )
 
 
 class DataLinesService(BaseService):
@@ -1070,21 +1118,179 @@ class QueryProgramsService(BaseService):
         response = self._patch(f"v1/queryprograms/{queryprogram_id}/unpublish")
         return self.factory.create(response)
 
-    def evaluate(self, queryprogram_id: str, dataline_id: str | None = None) -> dict:
+    def evaluate(
+        self,
+        queryprogram_id: str,
+        dataline_id: str | None = None,
+        project_id: str | None = None,
+    ) -> dict:
         """
         Evaluate a query program.
 
         Args:
             queryprogram_id: The query program ID
             dataline_id: The dataline ID (optional)
+            project_id: The project ID (uses current project if not specified)
 
         Returns:
             Evaluation results
         """
-        data = {"queryprogram_id": queryprogram_id}
+        if project_id is None:
+            project_id = self.client.state.project_id
+            if project_id is None:
+                raise ValueError("No project_id provided and no current project set")
+
+        data = {"queryprogram_id": queryprogram_id, "project_id": project_id}
 
         if dataline_id:
             data["dataline_id"] = dataline_id
 
         response = self._post("v1/actions/evaluate/queryprogram", data)
+        return response
+
+
+class JobsService(BaseService):
+    """Service for managing jobs."""
+
+    def submit_job(
+        self,
+        project_id: str | None = None,
+        job_type: str = "upload",
+        payload: dict | None = None,
+        do_not_send_to_queue: bool = True,
+        source_id: str | None = None,
+        source: str | None = None,
+        source_event_type: str | None = None,
+        source_metadata: dict | str | None = None,
+    ) -> dict:
+        """
+        Submit a new job.
+
+        Args:
+            project_id: The project ID (uses current project if not specified)
+            job_type: The job type (e.g. 'upload', 'process', etc.)
+            payload: Job-specific payload data
+            do_not_send_to_queue: Whether to not send the job to queue
+            source_id: ID of the source object
+            source: Source type (e.g. 'datasource')
+            source_event_type: Type of source event (e.g. 'file_upload')
+            source_metadata: Additional metadata as dict or JSON string
+
+        Returns:
+            Job submission response
+        """
+        if project_id is None:
+            project_id = self.client.state.project_id
+            if project_id is None:
+                raise ValueError("No project_id provided and no current project set")
+
+        # Prepare the job data
+        data = {
+            "project_id": project_id,
+            "job_type": job_type,
+            "do_not_send_to_queue": do_not_send_to_queue,
+        }
+
+        if payload:
+            data["payload"] = payload
+
+        if source_id:
+            data["source_id"] = source_id
+
+        if source:
+            data["source"] = source
+
+        if source_event_type:
+            data["source_event_type"] = source_event_type
+
+        if source_metadata:
+            if isinstance(source_metadata, dict):
+                import json
+
+                data["source_metadata"] = json.dumps(source_metadata)
+            else:
+                data["source_metadata"] = source_metadata
+
+        response = self._post("v1/jobs", data)
+        return response
+
+    def get_job(self, job_id: str) -> dict:
+        """
+        Get job details by ID.
+
+        Args:
+            job_id: The job ID
+
+        Returns:
+            Job details
+        """
+        response = self._get(f"v1/jobs/{job_id}")
+        return response
+
+    def list_jobs(
+        self,
+        project_id: str | None = None,
+        job_type: str | None = None,
+        source_id: str | None = None,
+        status: str | None = None,
+        skip: int = 0,
+        take: int = 100,
+    ) -> list[dict]:
+        """
+        List jobs with optional filtering.
+
+        Args:
+            project_id: The project ID to filter by
+            job_type: Filter by job type
+            source_id: Filter by source ID
+            status: Filter by job status
+            skip: Number of records to skip
+            take: Number of records to take
+
+        Returns:
+            List of jobs
+        """
+        params = {"skip": skip, "take": take}
+
+        if project_id:
+            params["project_id"] = project_id
+
+        if job_type:
+            params["job_type"] = job_type
+
+        if source_id:
+            params["source_id"] = source_id
+
+        if status:
+            params["status"] = status
+
+        response = self._get("v1/jobs", params)
+        return response
+
+    def subscribe_to_job_events(
+        self, source_id: str | None = None, job_id: str | None = None
+    ) -> dict:
+        """
+        Subscribe to job events via server-sent events.
+
+        This is a placeholder for the SSE implementation.
+        In a real implementation, this would return a streaming connection.
+
+        Args:
+            source_id: The source ID to filter events by
+            job_id: The job ID to filter events by
+
+        Returns:
+            Subscription details
+        """
+        params = {}
+
+        if source_id:
+            params["source_id"] = source_id
+
+        if job_id:
+            params["job_id"] = job_id
+
+        # This would be implemented with SSE or WebSockets in a real client
+        response = {"status": "subscribed", "source_id": source_id, "job_id": job_id}
         return response
