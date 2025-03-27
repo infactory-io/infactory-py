@@ -473,12 +473,33 @@ def subscribe_to_job(client, job_id, callback=None, timeout=300):  # noqa: C901
 
     # Define a default callback if none provided
     if callback is None:
+        # Track the previous event type
+        previous_event_type = [
+            None
+        ]  # Using list to allow modification in nested function
 
         def default_callback(event):
             event_type = event.get("event_type", "unknown")
             progress = event.get("progress")
+
+            # Log when event type changes
+            if (
+                previous_event_type[0] is not None
+                and previous_event_type[0] != event_type
+            ):
+                if event_type.endswith("LLMContent"):
+                    logger.info(f"Job event: {event_type}")
+                elif previous_event_type[0].endswith("LLMContent"):
+                    print()
+
+            # Update the previous event type
+            previous_event_type[0] = event_type
+
             if progress is not None:
                 logger.info(f"Job progress: {progress}%")
+            elif event_type.endswith("LLMContent"):
+                if content := event.get("payload", {}).get("content", ""):
+                    print(f"\033[36m{content}\033[0m", end="", flush=True)
             else:
                 logger.info(f"Job event: {event_type}")
 
@@ -617,6 +638,97 @@ def subscribe_to_job(client, job_id, callback=None, timeout=300):  # noqa: C901
         processor_thread.join(timeout=2)
 
 
+def subscribe_to_datasource_jobs(client, datasource_id, callback=None, timeout=300):
+    """
+    Subscribe to all jobs related to a datasource.
+
+    Args:
+        client: InfactoryClient instance
+        datasource_id: ID of the datasource to monitor jobs for
+        callback: Optional callback function to process events
+        timeout: Maximum time to wait in seconds
+
+    Returns:
+        List of job IDs that were monitored
+    """
+    logger = logging.getLogger("datasource_jobs")
+    logger.info(f"Monitoring all jobs for datasource {datasource_id}")
+
+    start_time = time.time()
+    monitored_jobs = set()
+    threads = []
+
+    while True:
+        # Check for timeout
+        if time.time() - start_time > timeout:
+            logger.info(f"Monitoring timeout reached after {timeout} seconds")
+            break
+
+        try:
+            # Query for all jobs with this datasource as source
+            response = client.http_client.get(
+                f"{client.base_url}/v1/jobs/status",
+                params={"source": "datasource", "source_id": datasource_id},
+            )
+
+            if response.status_code != 200:
+                logger.error(
+                    f"Error getting jobs: {response.status_code} {response.text}"
+                )
+                time.sleep(5)
+                continue
+
+            jobs = response.json()
+            if not isinstance(jobs, list):
+                if isinstance(jobs, dict) and "jobs" in jobs:
+                    jobs = jobs["jobs"]
+                else:
+                    logger.warning(f"Unexpected jobs response format: {jobs}")
+                    time.sleep(5)
+                    continue
+
+            # Start monitoring any new jobs we find
+            for job in jobs:
+                job_id = job.get("id")
+                if job_id and job_id not in monitored_jobs:
+                    logger.info(
+                        f"Found new job to monitor: {job_id} (status: {job.get('status')})"
+                    )
+                    monitored_jobs.add(job_id)
+
+                    # Start a thread to monitor this specific job
+                    thread = threading.Thread(
+                        target=subscribe_to_job,
+                        args=(client, job_id, callback),
+                        kwargs={"timeout": timeout - (time.time() - start_time)},
+                    )
+                    thread.daemon = True
+                    thread.start()
+                    threads.append(thread)
+
+            # Check if all jobs are completed
+            all_completed = True
+            for job in jobs:
+                if job.get("status") not in ["completed", "failed", "error"]:
+                    all_completed = False
+                    break
+
+            if jobs and all_completed:
+                logger.info("All jobs for datasource have completed")
+                break
+
+        except Exception as e:
+            logger.error(f"Error monitoring datasource jobs: {e}")
+
+        time.sleep(5)
+
+    # Wait for all monitoring threads to finish
+    for thread in threads:
+        thread.join(timeout=1)
+
+    return list(monitored_jobs)
+
+
 def main():  # noqa: C901
     # Initialize client
     print_step(1, "Initialize client and authenticate")
@@ -739,36 +851,23 @@ def main():  # noqa: C901
     print("File upload request sent successfully!")
 
     # Step 5: Monitor job progress
-    print_step(5, "Monitor job progress")
+    print_step(5, "Monitor all jobs for datasource")
 
-    # Try to subscribe to streaming updates first
-    print("Attempting to subscribe to streaming job updates...")
-    subscription_thread = threading.Thread(
-        target=subscribe_to_job, args=(client, job_id), kwargs={"timeout": 300}
+    # Subscribe to all jobs for this datasource instead of just one job
+    print(f"Monitoring all jobs for datasource {datasource.id}...")
+    monitored_jobs = subscribe_to_datasource_jobs(client, datasource.id, timeout=300)
+    print(
+        f"Monitored {len(monitored_jobs)} jobs for datasource: {', '.join(monitored_jobs)}"
     )
-    subscription_thread.daemon = True
-    subscription_thread.start()
 
-    # Also start monitoring with polling as a fallback
-    print("Starting event monitoring thread...")
-    event_monitoring_thread = threading.Thread(
-        target=monitor_job_events, args=(client, job_id, 300, True)
-    )
-    event_monitoring_thread.daemon = True
-    event_monitoring_thread.start()
-
-    # Monitor job status directly
+    # We can still check our initial job as well
     job_success, job_status = wait_for_job_completion(
-        client, job_id, timeout=300, poll_interval=2  # 5 minutes timeout
+        client, job_id, timeout=300, poll_interval=2
     )
-
-    # Wait for monitoring threads to finish
-    subscription_thread.join(timeout=2)
-    event_monitoring_thread.join(timeout=2)
 
     if not job_success:
-        print(f"Job failed with status: {job_status}")
-        # sys.exit(1)
+        print(f"Initial job failed with status: {job_status}")
+        # Do not exit, we'll continue to see what other jobs did
 
     # Step 6: Wait for and list datalines
     print_step(6, "Wait for and list datalines")
