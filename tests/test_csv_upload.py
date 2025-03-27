@@ -667,7 +667,7 @@ def subscribe_to_datasource_jobs(client, datasource_id, callback=None, timeout=3
         try:
             # Query for all jobs with this datasource as source
             response = client.http_client.get(
-                f"{client.base_url}/v1/jobs/status",
+                f"{client.base_url}/v1/jobs/by-source",
                 params={"source": "datasource", "source_id": datasource_id},
             )
 
@@ -689,7 +689,7 @@ def subscribe_to_datasource_jobs(client, datasource_id, callback=None, timeout=3
 
             # Start monitoring any new jobs we find
             for job in jobs:
-                job_id = job.get("id")
+                job_id = job.get("job_id")
                 if job_id and job_id not in monitored_jobs:
                     logger.info(
                         f"Found new job to monitor: {job_id} (status: {job.get('status')})"
@@ -942,113 +942,71 @@ def main():  # noqa: C901
     # Step 9: List API endpoints
     print_step(9, "List API endpoints")
 
-    try:
-        # Try to get endpoints through the API if available
-        # This is a placeholder - adjust according to the actual API endpoints
-        print("Available API endpoints:")
-        for i, qp in enumerate(published_queries, 1):
-            endpoint_path = f"/v1/live/{project.id}/{qp.id}/data"
-            print(f"  {i}. {qp.name}")
-            print(f"     Endpoint: {client.base_url}{endpoint_path}")
-            print("     Method: GET")
+    print("Fetching API endpoints for the project...")
+    response = client.http_client.get(f"{client.base_url}/v1/apis/project/{project.id}")
 
-        # Try to get OpenAPI spec if available
-        print("\nAPI Documentation (OpenAPI):")
-        print(f"  URL: {client.base_url}/v1/openapi/{project.id}")
-    except Exception as e:
-        print(f"Error listing endpoints: {e}")
+    if response.status_code == 200:
+        apis = response.json()
+        print(f"Found {len(apis)} APIs for project {project.id}")
+
+        for i, api in enumerate(apis, 1):
+            print(f"  {i}. API ID: {api.get('id')}")
+            print(f"     Path: {api.get('base_path', 'Unknown')}")
+            print(f"     Name: {api.get('name', 'Unnamed')}")
+            print(f"     Description: {api.get('description', 'Unknown')}")
+            print(f"     Version: {api.get('version', 'v1')}")
+    else:
+        print(f"Error fetching APIs: {response.status_code} {response.text}")
+        raise Exception(f"Error fetching APIs: {response.status_code} {response.text}")
+
+    # Try to get endpoints through the API if available
+    print("Available API endpoints:")
+    for i, endpoint in enumerate(api["endpoints"]):
+        path = endpoint["path"]
+        url = f"{client.base_url}/live/{api['base_path']}/{api['version']}/{path}"
+        print(f"  {i}. {url}")
+    else:
+        print("No endpoints available to test")
+
+    # Try to get OpenAPI spec if available
+    print("\nAPI Documentation (OpenAPI):")
+    print(
+        f"  URL: {client.base_url}/live/{api['base_path']}/{api['version']}/openapi.json"
+    )
+    print("\nLLM Tools Compatibility:")
+    print(
+        f"  URL: {client.base_url}/live/{api['base_path']}/{api['version']}/tools.json"
+    )
 
     # Step 10: Make API requests with custom parameters
-    print_step(10, "Make API requests with custom parameters")
+    print_step(10, "Make API requests with default parameters")
 
-    if published_queries:
-        try:
-            # Pick the first published query for testing
-            test_query = published_queries[0]
-            endpoint_path = f"/v1/live/{project.id}/{test_query.id}/data"
-            full_url = f"{client.base_url}{endpoint_path}"
+    # Try to get endpoints through the API if available
+    print("Available API endpoints:")
+    for i, endpoint in enumerate(api["endpoints"]):
+        path = endpoint["path"]
+        url = f"{client.base_url}/live/{api['base_path']}/{api['version']}/{path}"
+        print(f"  {i}. {url}")
 
-            print(f"Testing API endpoint: {full_url}")
-            print("With parameters: limit=5, sort_by=date")
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json",
+        }
 
-            headers = {
-                "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": "application/json",
-            }
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            result = response.json()
+            print(
+                f"\033[34mResponse data: {json.dumps(result, indent=2)[:500]}...\033[0m"
+            )  # Truncate long responses
+        else:
+            print(f"Request failed with status code {response.status_code}")
+            print(f"Response: {response.text}")
+    else:
+        print("No endpoints available to test")
 
-            params = {"limit": 5, "sort_by": "date"}
-
-            response = requests.get(full_url, headers=headers, params=params)
-
-            if response.status_code == 200:
-                print("API request successful!")
-                result = response.json()
-                print(json.dumps(result, indent=2))
-            else:
-                print(f"API request failed with status code {response.status_code}")
-                print(response.text)
-
-                # If real API fails, show mock data
-                print("\nMock response for demonstration:")
-                mock_response = {
-                    "data": [
-                        {
-                            "date": "2023-03-01",
-                            "symbol": "AAPL",
-                            "price": 145.91,
-                            "volume": 83521000,
-                        },
-                        {
-                            "date": "2023-03-02",
-                            "symbol": "AAPL",
-                            "price": 149.58,
-                            "volume": 75684300,
-                        },
-                        {
-                            "date": "2023-03-03",
-                            "symbol": "AAPL",
-                            "price": 151.03,
-                            "volume": 70898900,
-                        },
-                    ],
-                    "meta": {
-                        "count": 3,
-                        "total": 22,
-                        "sort_by": "date",
-                        "order": "asc",
-                    },
-                }
-                print(json.dumps(mock_response, indent=2))
-
-        except Exception as e:
-            print(f"Error making API request: {e}")
-
-            # Show mock data if real request fails
-            print("\nMock response for demonstration:")
-            mock_response = {
-                "data": [
-                    {
-                        "date": "2023-03-01",
-                        "symbol": "AAPL",
-                        "price": 145.91,
-                        "volume": 83521000,
-                    },
-                    {
-                        "date": "2023-03-02",
-                        "symbol": "AAPL",
-                        "price": 149.58,
-                        "volume": 75684300,
-                    },
-                    {
-                        "date": "2023-03-03",
-                        "symbol": "AAPL",
-                        "price": 151.03,
-                        "volume": 70898900,
-                    },
-                ],
-                "meta": {"count": 3, "total": 22, "sort_by": "date", "order": "asc"},
-            }
-            print(json.dumps(mock_response, indent=2))
+    if not published_queries:
+        raise Exception("No published queries found")
 
     # Step 11: Use the chat endpoint with streaming response
     print_step(11, "Use the chat endpoint with streaming response")
