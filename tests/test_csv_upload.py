@@ -73,7 +73,7 @@ if not API_KEY:
     print("Please set your API key with: export NF_API_KEY=your_api_key_here")
     sys.exit(1)
 
-CSV_FILE = "stocks.csv"
+CSV_FILE = "./tests/stocks.csv"
 if not os.path.exists(CSV_FILE):
     print(f"ERROR: {CSV_FILE} not found in current directory.")
     sys.exit(1)
@@ -728,7 +728,7 @@ def main():  # noqa: C901
             f"{client.base_url}/v1/actions/load/{project.id}",
             files=files,
             data=form_data,
-            params={"job_id": job_id},
+            params={"job_id": job_id, "datasource_id": datasource.id},
         )
 
     # Check response
