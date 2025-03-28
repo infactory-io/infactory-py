@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+import time
 
 import typer
 from dotenv import load_dotenv
@@ -531,7 +532,8 @@ def projects_select():
 def datasources_list(
     project_id: str | None = typer.Option(
         None, help="Project ID to list datasources for"
-    )
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format"),
 ):
     """List datasources."""
     client = get_client()
@@ -549,6 +551,22 @@ def datasources_list(
 
         if not datasources:
             typer.echo("No datasources found")
+            return
+
+        if json_output:
+            datasources_data = [
+                {
+                    "id": ds.id,
+                    "name": ds.name,
+                    "type": ds.type,
+                    "uri": ds.uri,
+                    "project_id": ds.project_id,
+                    "created_at": ds.created_at.isoformat() if ds.created_at else None,
+                    "updated_at": ds.updated_at.isoformat() if ds.updated_at else None,
+                }
+                for ds in datasources
+            ]
+            print(json.dumps(datasources_data, indent=2))
             return
 
         table = Table()
@@ -571,42 +589,250 @@ def datasources_list(
 
 
 @datasources_app.command(name="create")
-def datasource_create(
+def datasource_create(  # noqa: C901
     name: str,
-    type: str = typer.Option(..., help="Datasource type (e.g. postgres, mysql)"),
+    type: str = typer.Option(None, help="Datasource type (e.g. csv, postgres, mysql)"),
     project_id: str | None = typer.Option(
         None, help="Project ID to create datasource in"
     ),
-    uri: str | None = typer.Option(None, help="Datasource URI"),
+    uri: str | None = typer.Option(
+        None, help="Connection string URI for database datasources"
+    ),
+    file: str | None = typer.Option(None, help="Path to a local file to upload"),
+    url: str | None = typer.Option(
+        None, help="URL to a remote file to use as datasource"
+    ),
+    credentials: str | None = typer.Option(
+        None, help="Credentials as JSON string for the datasource"
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Disable progress tracking"
+    ),
+    job_id: str | None = typer.Option(
+        None, help="Optional job ID for tracking upload progress"
+    ),
 ):
-    """Create a new datasource."""
+    """Create a new datasource.
+
+    For CSV files, the type will be inferred automatically if not specified.
+    Examples:
+      nf datasources create my-csv-data --file stocks.csv
+      nf datasources create my-postgres-db --type postgres --uri postgresql://user:pass@host:port/db
+      nf datasources create my-api-data --url https://example.com/data.json
+    """
     client = get_client()
 
-    try:
-        if not project_id and not client.state.project_id:
+    if not project_id:
+        project_id = client.state.project_id
+        if not project_id:
             typer.echo(
-                "No project ID provided. Please specify --project-id or set a current project.",
-                err=True,
+                "Error: No project specified and no current project set.", err=True
             )
             raise typer.Exit(1)
 
-        project_id = project_id or client.state.project_id
+    # Determine the datasource type
+    resolved_type = type
+
+    if file and not resolved_type:
+        # Try to infer type from file extension
+        file_extension = os.path.splitext(file)[1].lower()
+        if file_extension == ".csv":
+            resolved_type = "csv"
+        elif file_extension == ".json":
+            resolved_type = "json"
+        elif file_extension == ".xlsx" or file_extension == ".xls":
+            resolved_type = "excel"
+
+    # Create the datasource
+    try:
         datasource = client.datasources.create(
-            name=name,
-            project_id=project_id,
-            type=type,
-            uri=uri,
+            name=name, project_id=project_id, type=resolved_type, uri=uri
         )
 
-        typer.echo("Datasource created successfully!")
-        typer.echo(f"ID: {datasource.id}")
-        typer.echo(f"Name: {datasource.name}")
-        typer.echo(f"Type: {datasource.type}")
-        if datasource.uri:
-            typer.echo(f"URI: {datasource.uri}")
+        typer.echo(f"Created datasource: {datasource.name} (ID: {datasource.id})")
+
+        # Handle file upload if specified
+        if file:
+            if not os.path.exists(file):
+                typer.echo(f"Error: File not found: {file}", err=True)
+                raise typer.Exit(1)
+
+            file_size = os.path.getsize(file)
+            if not quiet:
+                typer.echo(f"Uploading file: {file} ({file_size / 1024 / 1024:.2f} MB)")
+
+            # If no job_id provided, create one to track upload progress
+            upload_job_id = job_id
+            if not upload_job_id and not quiet:
+                # Create a job for tracking upload progress
+                file_name = os.path.basename(file)
+                job_payload = {
+                    "datasource_id": datasource.id,
+                    "file_name": file_name,
+                    "file_size": file_size,
+                    "dataset_name": datasource.name,
+                }
+
+                job_metadata = {
+                    "file_name": file_name,
+                    "file_size": file_size,
+                    "dataset_name": datasource.name,
+                }
+
+                try:
+                    response = client.http_client.post(
+                        f"{client.base_url}/v1/jobs/submit",
+                        json={
+                            "project_id": project_id,
+                            "job_type": "upload",
+                            "do_not_send_to_queue": True,
+                            "source_id": datasource.id,
+                            "source": "datasource",
+                            "source_event_type": "file_upload",
+                            "source_metadata": json.dumps(job_metadata),
+                            "payload": job_payload,
+                        },
+                        headers={"Content-Type": "application/json"},
+                    )
+
+                    if response.status_code == 200:
+                        upload_job_id = response.json()
+                        if not quiet:
+                            typer.echo(f"Created upload job: {upload_job_id}")
+                    else:
+                        if not quiet:
+                            typer.echo(
+                                f"Warning: Failed to create tracking job: {response.text}",
+                                err=True,
+                            )
+                except Exception as e:
+                    if not quiet:
+                        typer.echo(
+                            f"Warning: Failed to create tracking job: {e}", err=True
+                        )
+
+            # Upload the file using the correct endpoint
+            try:
+                with open(file, "rb") as f:
+                    files = {"file": (os.path.basename(file), f)}
+                    form_data = {"datasource_id": datasource.id}
+                    params = {}
+
+                    if upload_job_id:
+                        form_data["job_id"] = upload_job_id
+                        params["job_id"] = upload_job_id
+
+                    response = client.http_client.post(
+                        f"{client.base_url}/v1/actions/load/{project_id}",
+                        files=files,
+                        data=form_data,
+                        params=params,
+                    )
+
+                if response.status_code != 200:
+                    typer.echo(f"Error uploading file: {response.text}", err=True)
+                    raise typer.Exit(1)
+
+                if not quiet:
+                    typer.echo("File uploaded successfully!")
+
+                    # If we have a job ID, show progress
+                    if upload_job_id:
+                        with typer.progressbar(
+                            length=100, label="Processing data"
+                        ) as progress:
+                            last_progress = 0
+                            start_time = time.time()
+                            timeout = 300  # 5 minutes
+
+                            while time.time() - start_time < timeout:
+                                try:
+                                    response = client.http_client.get(
+                                        f"{client.base_url}/v1/jobs/status",
+                                        params={"job_id": upload_job_id},
+                                    )
+
+                                    if response.status_code == 200:
+                                        job_info = response.json()
+
+                                        # Handle different response formats
+                                        if isinstance(job_info, list) and job_info:
+                                            job_info = next(
+                                                (
+                                                    job
+                                                    for job in job_info
+                                                    if job.get("id") == upload_job_id
+                                                ),
+                                                None,
+                                            )
+                                        elif (
+                                            isinstance(job_info, dict)
+                                            and "jobs" in job_info
+                                        ):
+                                            matching_jobs = [
+                                                job
+                                                for job in job_info["jobs"]
+                                                if job.get("id") == upload_job_id
+                                            ]
+                                            if matching_jobs:
+                                                job_info = matching_jobs[0]
+
+                                        if job_info and isinstance(job_info, dict):
+                                            status = job_info.get("status")
+                                            progress_value = job_info.get("progress", 0)
+
+                                            # Update progress bar
+                                            if progress_value > last_progress:
+                                                progress.update(
+                                                    progress_value - last_progress
+                                                )
+                                                last_progress = progress_value
+
+                                            # Check for completion
+                                            if status in [
+                                                "completed",
+                                                "failed",
+                                                "error",
+                                            ]:
+                                                if status == "completed":
+                                                    progress.update(100 - last_progress)
+                                                    typer.echo(
+                                                        "\nData processing completed successfully!"
+                                                    )
+                                                else:
+                                                    typer.echo(
+                                                        f"\nData processing {status}. Check logs for details."
+                                                    )
+                                                break
+                                except Exception as e:
+                                    typer.echo(
+                                        f"\nError checking job status: {e}", err=True
+                                    )
+
+                                time.sleep(2)
+
+                            if time.time() - start_time >= timeout:
+                                typer.echo(
+                                    "\nTimeout waiting for job completion. The process may still be running."
+                                )
+
+            except Exception as e:
+                typer.echo(f"Error uploading file: {e}", err=True)
+                raise typer.Exit(1)
+
+        # Handle URL datasources
+        elif url:
+            typer.echo(f"Setting datasource URL: {url}")
+            client.datasources.update(datasource.id, uri=url)
+            typer.echo("URL datasource configured successfully!")
+
+        # Print JSON output in a nice format
+        typer.echo(json.dumps(datasource.dict(), indent=2))
+
+        return datasource
 
     except Exception as e:
-        typer.echo(f"Failed to create datasource: {e}", err=True)
+        typer.echo(f"Error creating datasource: {e}", err=True)
         raise typer.Exit(1)
 
 
@@ -825,6 +1051,9 @@ def query_get(
     ),
     run: bool = typer.Option(False, "--run", help="Run the query program"),
     analyze: bool = typer.Option(False, "--analyze", help="Analyze the query program"),
+    project_id: str | None = typer.Option(
+        None, help="Project ID for the query (uses current project if not specified)"
+    ),
 ):
     """Get a query program by ID and optionally perform actions on it."""
     client = get_client()
@@ -845,7 +1074,20 @@ def query_get(
             typer.echo(f"Query program {query_id} unpublished successfully")
 
         if run:
-            result = client.query_programs.evaluate(query_id)
+            # Get project ID from parameters, query program, or current state
+            if project_id is None:
+                project_id = query_program.project_id or client.state.project_id
+                if project_id is None:
+                    typer.echo(
+                        "Error: No project ID provided. Please specify --project-id or set a current project.",
+                        err=True,
+                    )
+                    raise typer.Exit(1)
+
+            result = client.query_programs.evaluate(
+                queryprogram_id=query_id, project_id=project_id
+            )
+
             if isinstance(result, dict) and "data" in result:
                 data = result["data"]
                 if isinstance(data, list) and data:
@@ -976,7 +1218,11 @@ def query_select(
             typer.echo(f"Query program {selected_query.id} unpublished successfully")
 
         if run:
-            result = client.query_programs.evaluate(selected_query.id)
+            # Use the current project ID that we already verified exists
+            result = client.query_programs.evaluate(
+                queryprogram_id=selected_query.id, project_id=client.state.project_id
+            )
+
             if isinstance(result, dict) and "data" in result:
                 data = result["data"]
                 if isinstance(data, list) and data:
@@ -1087,29 +1333,138 @@ def endpoints_curl(endpoint_id: str):
 
 
 @jobs_app.command(name="subscribe")
-def jobs_subscribe(datasource_id: str):
-    """Subscribe to job updates."""
-    get_client()
+def jobs_subscribe(  # noqa: C901
+    datasource_id: str = typer.Option(None, help="The datasource ID to subscribe to"),
+    job_id: str = typer.Option(None, help="Specific job ID to subscribe to"),
+    timeout: int = typer.Option(
+        0, help="Auto-exit after this many seconds (0 = no timeout)"
+    ),
+    poll_interval: float = typer.Option(1.0, help="Polling interval in seconds"),
+):
+    """
+    Subscribe to job updates for a datasource or specific job.
+
+    Examples:
+      nf jobs subscribe --datasource-id ds-abc123
+      nf jobs subscribe --job-id j-456def
+      nf jobs subscribe --datasource-id ds-abc123 --timeout 30
+    """
+    if not datasource_id and not job_id:
+        typer.echo("Error: Either datasource-id or job-id must be provided", err=True)
+        raise typer.Exit(1)
+
+    client = get_client()
 
     try:
-        typer.echo(f"Subscribing to jobs for datasource {datasource_id}...")
+        if datasource_id:
+            typer.echo(f"Subscribing to jobs for datasource {datasource_id}...")
+        if job_id:
+            typer.echo(f"Subscribing to job {job_id}...")
 
-        # Mock data for example
-        typer.echo(
-            "[2025-03-25 14:30:21] Job j-123456 started: Connecting to PostgreSQL database"
-        )
-        typer.echo(
-            "[2025-03-25 14:30:22] Job j-123456 progress: Successfully connected to database"
-        )
-        typer.echo(
-            "[2025-03-25 14:30:25] Job j-123456 progress: Analyzing table structure"
-        )
-        typer.echo(
-            "[2025-03-25 14:30:30] Job j-123456 progress: Found 12 tables with 450,000 rows total"
-        )
-        typer.echo(
-            "[2025-03-25 14:30:45] Job j-123456 completed: Database connection established and schema analyzed"
-        )
+        # If we have a timeout, set it up
+        import time
+        from datetime import datetime
+
+        start_time = datetime.now()
+        last_status = {}
+
+        # Implement polling loop for job status
+        while True:
+            try:
+                # Check elapsed time if timeout is set
+                if timeout > 0:
+                    elapsed = (datetime.now() - start_time).total_seconds()
+                    if elapsed >= timeout:
+                        typer.echo(f"\nTimeout reached after {timeout} seconds.")
+                        break
+
+                # If following a specific job
+                if job_id:
+                    job_info = client.jobs.get_job(job_id)
+                    if job_info:
+                        # Only show updates when the status changes
+                        current_status = (
+                            job_info.get("status", "unknown"),
+                            job_info.get("progress", 0),
+                        )
+
+                        if (
+                            job_id not in last_status
+                            or last_status[job_id] != current_status
+                        ):
+                            last_status[job_id] = current_status
+                            status_str = (
+                                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                            )
+                            status_str += f"Job {job_id} "
+                            status_str += f"status: {job_info.get('status', 'unknown')}"
+
+                            # Add progress if available
+                            if "progress" in job_info:
+                                status_str += f", progress: {job_info['progress']}%"
+
+                            # Add message if available
+                            if "message" in job_info:
+                                status_str += f", message: {job_info['message']}"
+
+                            typer.echo(status_str)
+
+                            # If the job is completed, failed, or errored, we can exit
+                            if job_info.get("status") in [
+                                "completed",
+                                "failed",
+                                "error",
+                            ]:
+                                typer.echo(
+                                    f"Job {job_id} reached final status: {job_info.get('status')}"
+                                )
+                                break
+
+                # If following all jobs for a datasource
+                elif datasource_id:
+                    jobs = client.jobs.list_jobs(source_id=datasource_id)
+
+                    if jobs:
+                        for job in jobs:
+                            job_id = job.get("id")
+                            if not job_id:
+                                continue
+
+                            # Only show updates when the status changes
+                            current_status = (
+                                job.get("status", "unknown"),
+                                job.get("progress", 0),
+                            )
+
+                            if (
+                                job_id not in last_status
+                                or last_status[job_id] != current_status
+                            ):
+                                last_status[job_id] = current_status
+                                status_str = (
+                                    f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                                )
+                                status_str += f"Job {job_id} "
+                                status_str += f"status: {job.get('status', 'unknown')}"
+
+                                # Add progress if available
+                                if "progress" in job:
+                                    status_str += f", progress: {job['progress']}%"
+
+                                # Add message if available
+                                if "message" in job:
+                                    status_str += f", message: {job['message']}"
+
+                                typer.echo(status_str)
+
+            except KeyboardInterrupt:
+                typer.echo("\nStopped monitoring jobs.")
+                break
+            except Exception as e:
+                typer.echo(f"Error monitoring jobs: {e}")
+
+            # Sleep for the polling interval
+            time.sleep(poll_interval)
 
     except Exception as e:
         typer.echo(f"Failed to subscribe to jobs: {e}", err=True)

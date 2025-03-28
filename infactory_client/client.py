@@ -239,7 +239,7 @@ class InfactoryClient:
             reraise=True,
         )
 
-    def _handle_response(self, response: httpx.Response) -> dict[str, Any]:
+    def _handle_response(self, response: httpx.Response) -> dict[str, Any] | str:
         """
         Process API response and handle errors with appropriate exceptions.
 
@@ -254,7 +254,32 @@ class InfactoryClient:
         """
         if response.is_success:
             try:
-                return response.json()
+                # First try to json decode the response
+                try:
+                    return response.json()
+                except json.JSONDecodeError:
+                    pass
+
+                # Then try to parse the response as an SSE response
+                content = response.text
+                lines = []
+                data = {}
+                for line in content.splitlines():
+                    lines.append(line)
+                    if line.startswith("data: "):
+                        value = line[6:].strip()
+                        try:
+                            value = json.loads(value)
+                        except json.JSONDecodeError:
+                            pass
+                        data["data"] = value
+                    elif line.startswith("event: "):
+                        data["event"] = line[6:].strip()
+                    else:
+                        pass
+                if data:
+                    return data
+                return response.text
             except json.JSONDecodeError:
                 raise APIError(
                     f"Failed to parse JSON response: {response.text}",
@@ -382,6 +407,7 @@ class InfactoryClient:
         from infactory_client.services import (
             DataLinesService,
             DataSourcesService,
+            JobsService,
             OrganizationsService,
             ProjectsService,
             QueryProgramsService,
@@ -397,6 +423,7 @@ class InfactoryClient:
             "organizations": OrganizationsService(self),
             "users": UsersService(self),
             "query_programs": QueryProgramsService(self),
+            "jobs": JobsService(self),
             # Add more services as needed
         }
 
@@ -428,6 +455,10 @@ class InfactoryClient:
     @property
     def query_programs(self):
         return self._get_service("query_programs")
+
+    @property
+    def jobs(self):
+        return self._get_service("jobs")
 
     # Helper methods for setting current context
     def set_current_project(self, project_id: str) -> None:
