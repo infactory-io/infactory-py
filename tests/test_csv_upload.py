@@ -156,7 +156,7 @@ def wait_for_job_completion(client, job_id, timeout=300, poll_interval=1, verbos
                     continue
                 job_info = matching_jobs[0]
 
-            status = job_info.get("status", "unknown")
+            status = job_info.get("latest_status", "unknown")
             progress = job_info.get("progress", 0)
 
             # Print progress updates
