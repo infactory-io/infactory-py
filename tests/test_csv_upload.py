@@ -598,6 +598,8 @@ def subscribe_to_job(client, job_id, callback=None, timeout=300):  # noqa: C901
                         event_queue.put(event_data)
 
                         # Check for completion
+                        if "status" in event_data.get("event_type", ""):
+                            print(event_data)
                         if event_data.get("event_type") in [
                             "job.completed",
                             "job.failed",
@@ -678,22 +680,20 @@ def subscribe_to_datasource_jobs(client, datasource_id, callback=None, timeout=3
                 time.sleep(5)
                 continue
 
-            jobs = response.json()
-            if not isinstance(jobs, list):
-                if isinstance(jobs, dict) and "jobs" in jobs:
-                    jobs = jobs["jobs"]
-                else:
-                    logger.warning(f"Unexpected jobs response format: {jobs}")
-                    time.sleep(5)
-                    continue
+            job_sources = response.json()
+            # if not isinstance(job_sources, list):
+            #     if isinstance(job_sources, dict) and "jobs" in job_sources:
+            #         job_sources = job_sources["jobs"]
+            #     else:
+            #         logger.warning(f"Unexpected jobs response format: {job_sources}")
+            #         time.sleep(5)
+            #         continue
 
             # Start monitoring any new jobs we find
-            for job in jobs:
-                job_id = job.get("job_id")
+            job_ids = [js["jobs"]["id"] for js in job_sources]
+            for job_id in job_ids:
                 if job_id and job_id not in monitored_jobs:
-                    logger.info(
-                        f"Found new job to monitor: {job_id} (status: {job.get('status')})"
-                    )
+                    logger.info(f"Found new job to monitor: {job_id}")
                     monitored_jobs.add(job_id)
 
                     # Start a thread to monitor this specific job
@@ -708,19 +708,44 @@ def subscribe_to_datasource_jobs(client, datasource_id, callback=None, timeout=3
 
             # Check if all jobs are completed
             all_completed = True
-            for job in jobs:
-                if job.get("status") not in ["completed", "failed", "error"]:
+            completed_jobs = set()
+            for job_id in monitored_jobs - completed_jobs:
+                # Get the status of the job
+                job_status = None
+
+                for job_source in job_sources:
+                    if job_source["jobs"]["id"] == job_id:
+                        if job_source["jobs"].get("latest_status") in [
+                            "completed",
+                            "failed",
+                            "error",
+                        ]:
+                            completed_jobs.add(job_id)
+                        else:
+                            all_completed = False
+                            break
+            for job_source in job_sources:
+                job_status = check_job_history(client, job_id)
+                if job_status and job_status["latest_status"] in [
+                    "completed",
+                    "failed",
+                    "error",
+                ]:
+                    completed_jobs.add(job_id)
+                else:
                     all_completed = False
                     break
 
-            if jobs and all_completed:
+            if job_sources and (
+                all_completed or len(monitored_jobs - completed_jobs) == 0
+            ):
                 logger.info("All jobs for datasource have completed")
                 break
 
         except Exception as e:
             logger.error(f"Error monitoring datasource jobs: {e}")
 
-        time.sleep(5)
+        time.sleep(2)
 
     # Wait for all monitoring threads to finish
     for thread in threads:
@@ -1010,103 +1035,6 @@ def main():  # noqa: C901
 
     # Step 11: Use the chat endpoint with streaming response
     print_step(11, "Use the chat endpoint with streaming response")
-
-    try:
-        # Use the correct OpenAI-compatible chat endpoint
-        chat_url = (
-            f"{client.base_url}/v1/integrations/chat/{project.id}/chat/completions"
-        )
-        print(f"Making request to chat endpoint: {chat_url}")
-        print("Question: What was the highest stock price in the last month?")
-
-        headers = {
-            "Authorization": f"Bearer {API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        # Format request in OpenAI-compatible format
-        data = {
-            "model": "gpt-4",  # This is ignored but required for compatibility
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant that answers questions based on the project data.",
-                },
-                {
-                    "role": "user",
-                    "content": "What was the highest stock price in the last month?",
-                },
-            ],
-            "stream": True,
-        }
-
-        logger = logging.getLogger("chat")
-
-        # Make the actual streaming request
-        try:
-            logger.info("Sending streaming chat request...")
-
-            response = requests.post(chat_url, json=data, headers=headers, stream=True)
-
-            if response.status_code != 200:
-                logger.error(
-                    f"Error from chat endpoint: {response.status_code} {response.text}"
-                )
-                raise Exception(f"API returned error: {response.status_code}")
-
-            # Process the streaming response
-            print("\nStreaming response:")
-
-            # Stream response content
-            buffer = ""
-            for chunk in response.iter_lines():
-                if not chunk:
-                    continue
-
-                chunk_str = chunk.decode("utf-8")
-                logger.debug(f"Chunk: {chunk_str}")
-
-                # Handle SSE format
-                if chunk_str.startswith("data: "):
-                    content = chunk_str[6:]  # Remove 'data: ' prefix
-
-                    # Skip [DONE] marker
-                    if content.strip() == "[DONE]":
-                        continue
-
-                    try:
-                        chunk_data = json.loads(content)
-                        choice = chunk_data.get("choices", [{}])[0]
-                        delta = choice.get("delta", {})
-                        content = delta.get("content", "")
-
-                        if content:
-                            print(content, end="", flush=True)
-                            buffer += content
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to parse chunk: {content}")
-
-            print("\n\nStreaming response completed!")
-
-        except Exception as e:
-            logger.error(f"Error streaming response: {e}")
-
-            # Fallback to simulated response
-            print("\nFalling back to simulated response due to error:")
-            streaming_chunks = [
-                "Analyzing the stock data...",
-                "Looking at prices over the last month...",
-                "The highest stock price in the last month was $157.82 for AAPL on March 15, 2023.",
-                "This represents a 12.4% increase from the beginning of the month.",
-                "Other notable high prices were $145.73 for MSFT and $208.91 for GOOG.",
-            ]
-
-            for chunk in streaming_chunks:
-                print(chunk)
-                time.sleep(0.5)  # Simulate streaming delay
-
-    except Exception as e:
-        print(f"Error using chat endpoint: {e}")
 
     # Summary
     print_step("FINAL", "Test Summary")
